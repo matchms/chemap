@@ -18,8 +18,8 @@ class FingerprintGenerator:
         Returns:
         np.array: The fingerprint as a NumPy array, or None if there's an error.
         """
+        mol = get_mol_from_smiles(smiles)
         try:
-            mol = Chem.MolFromSmiles(smiles)
             if count:
                 return self.fpgen.GetCountFingerprintAsNumPy(mol)
             return self.fpgen.GetFingerprintAsNumPy(mol)
@@ -60,28 +60,7 @@ class SparseFingerprintGenerator:
         if (bit_weighing is not None) and not count:
             raise NotImplementedError("Weighing is currently only implemented for count vectors.")
         
-        try:
-            mol = Chem.MolFromSmiles(smiles)
-            if mol is None:
-                raise ValueError("MolFromSmiles returned None with default sanitization.")
-        except Exception as e:
-            print(f"Error processing SMILES {smiles} with default sanitization: {e}")
-            print("Retrying with sanitize=False...")
-            try:
-                mol = Chem.MolFromSmiles(smiles, sanitize=False)
-                # Regenerate computed properties like implicit valence and ring information
-                mol.UpdatePropertyCache(strict=False)
-
-                # Apply several sanitization rules (taken from http://rdkit.org/docs/Cookbook.html)
-                Chem.SanitizeMol(mol,Chem.SanitizeFlags.SANITIZE_FINDRADICALS|Chem.SanitizeFlags.SANITIZE_KEKULIZE\
-                                 |Chem.SanitizeFlags.SANITIZE_SETAROMATICITY|Chem.SanitizeFlags.SANITIZE_SETCONJUGATION\
-                                 |Chem.SanitizeFlags.SANITIZE_SETHYBRIDIZATION|Chem.SanitizeFlags.SANITIZE_SYMMRINGS,
-                                 catchErrors=True)
-                if mol is None:
-                    raise ValueError("MolFromSmiles returned None even with sanitize=False.")
-            except Exception as e2:
-                print(f"Error processing SMILES {smiles} with sanitize=False: {e2}")
-                return None
+        mol = get_mol_from_smiles(smiles)
 
         # Now generate the fingerprint.
         try:
@@ -96,6 +75,32 @@ class SparseFingerprintGenerator:
         except Exception as e:
             print(f"Error generating fingerprint for SMILES {smiles}: {e}")
             return None
+
+
+def get_mol_from_smiles(smiles):
+    try:
+        mol = Chem.MolFromSmiles(smiles)
+        if mol is None:
+            raise ValueError("MolFromSmiles returned None with default sanitization.")
+    except Exception as e:
+        print(f"Error processing SMILES {smiles} with default sanitization: {e}")
+        print("Retrying with sanitize=False...")
+        try:
+            mol = Chem.MolFromSmiles(smiles, sanitize=False)
+            # Regenerate computed properties like implicit valence and ring information
+            mol.UpdatePropertyCache(strict=False)
+
+            # Apply several sanitization rules (taken from http://rdkit.org/docs/Cookbook.html)
+            Chem.SanitizeMol(mol,Chem.SanitizeFlags.SANITIZE_FINDRADICALS|Chem.SanitizeFlags.SANITIZE_KEKULIZE\
+                                |Chem.SanitizeFlags.SANITIZE_SETAROMATICITY|Chem.SanitizeFlags.SANITIZE_SETCONJUGATION\
+                                |Chem.SanitizeFlags.SANITIZE_SETHYBRIDIZATION|Chem.SanitizeFlags.SANITIZE_SYMMRINGS,
+                                catchErrors=True)
+            if mol is None:
+                raise ValueError("MolFromSmiles returned None even with sanitize=False.")
+        except Exception as e2:
+            print(f"Error processing SMILES {smiles} with sanitize=False: {e2}")
+            return None
+    return mol
 
 
 def prepare_sparse_vector(
