@@ -1,6 +1,8 @@
 import numba
 from numba import prange
 import numpy as np
+import scipy.sparse as sp
+from sklearn.metrics import pairwise_distances
 
 
 @numba.njit
@@ -174,8 +176,102 @@ def ruzicka_similarity(A, B):
     return min_sum / max_sum
 
 
+def ruzicka_similarity_matrix_sparse_all_vs_all(fingerprints) -> np.ndarray:
+    """
+    Calculate the Ruzicka similarity between all sparse fingerprints.
+    """
+    mapping = occupied_bit_mapping(fingerprints)
+    X = sparse_fingerprint_to_csr(fingerprints, mapping)
+
+    # Precompute L1 norms.
+    norms = np.array(X.sum(axis=1)).ravel()
+
+    # Compute pairwise Manhattan distances.
+    manhattan = pairwise_distances(X, metric='manhattan')
+
+    return compute_ruzicka_from_manhattan_symmetric(norms, manhattan)
+
+
+def ruzicka_similarity_matrix_sparse(fingerprints_1, fingerprints_2) -> np.ndarray:
+    """
+    Calculate the Ruzicka similarity between sparse fingerprints_1 and fingerprints_2.
+    """
+    mapping = occupied_bit_mapping(fingerprints_1 + fingerprints_2)
+    X1 = sparse_fingerprint_to_csr(fingerprints_1, mapping)
+    X2 = sparse_fingerprint_to_csr(fingerprints_2, mapping)
+
+    # Precompute L1 norms.
+    norms1 = np.array(X1.sum(axis=1)).ravel()
+    norms2 = np.array(X2.sum(axis=1)).ravel()
+
+    # Compute pairwise Manhattan distances.
+    manhattan = pairwise_distances(X1, X2, metric='manhattan')
+
+    return compute_ruzicka_from_manhattan(norms1, norms2, manhattan)
+
+
+def occupied_bit_mapping(fingerprints_sparse):
+    # Collect all unique keys.
+    all_keys = set()
+    for keys, _ in fingerprints_sparse:
+        all_keys.update(keys.tolist())
+
+    # Create a mapping from original key to a new, contiguous index.
+    sorted_keys = sorted(all_keys)
+    return {old_key: new_key for new_key, old_key in enumerate(sorted_keys)}
+
+
+def sparse_fingerprint_to_csr(fingerprints_sparse, mapping):
+    # Build lists for constructing the sparse matrix.
+    rows = []
+    cols = []
+    vals = []
+
+    for i, (keys, values) in enumerate(fingerprints_sparse):
+        new_keys = np.array([mapping[k] for k in keys], dtype=np.int32)
+        rows.extend([i] * len(new_keys))
+        cols.extend(new_keys.tolist())
+        vals.extend(values.tolist())
+
+    num_rows = len(fingerprints_sparse)
+    num_cols = len(mapping)  # number of occupied features
+
+    # Build the COO matrix and convert to CSR.
+    X = sp.coo_matrix((vals, (rows, cols)), shape=(num_rows, num_cols), dtype=np.float32)
+    return X.tocsr()
+
+
+@numba.njit(parallel=True, fastmath=True)
+def compute_ruzicka_from_manhattan_symmetric(norms, manhattan):
+    n = norms.shape[0]
+    ruzicka = np.empty((n, n), dtype=norms.dtype)
+    for i in numba.prange(n):
+        for j in range(n):
+            union = norms[i] + norms[j] + manhattan[i, j]
+            if union > 0:
+                ruzicka[i, j] = (norms[i] + norms[j] - manhattan[i, j]) / union
+            else:
+                ruzicka[i, j] = 1.0
+    return ruzicka
+
+
+@numba.njit(parallel=True, fastmath=True)
+def compute_ruzicka_from_manhattan(norms1, norms2, manhattan):
+    n = norms1.shape[0]
+    m = norms2.shape[0]
+    ruzicka = np.empty((n, m), dtype=norms1.dtype)
+    for i in numba.prange(n):
+        for j in range(m):
+            union = norms1[i] + norms2[j] + manhattan[i, j]
+            if union > 0:
+                ruzicka[i, j] = (norms1[i] + norms2[j] - manhattan[i, j]) / union
+            else:
+                ruzicka[i, j] = 1.0
+    return ruzicka
+
+
 @numba.njit
-def ruzicka_similarity_sparse(keys1, values1, keys2, values2) -> float:
+def ruzicka_similarity_sparse_numba(keys1, values1, keys2, values2) -> float:
     """
     Calculate the Ruzicka similarity between two sparse count vectors.
 
@@ -240,7 +336,7 @@ def ruzicka_similarity_matrix(references: np.ndarray, queries: np.ndarray) -> np
 
 
 @numba.jit(nopython=True, fastmath=True, parallel=True)
-def ruzicka_similarity_matrix_sparse(
+def ruzicka_similarity_matrix_sparse_numba(
     references: list, queries: list) -> np.ndarray:
     """Returns matrix of Ruzicka similarity between all-vs-all vectors of references and queries.
 
@@ -262,7 +358,7 @@ def ruzicka_similarity_matrix_sparse(
     scores = np.zeros((size1, size2))
     for i in prange(size1):
         for j in range(size2):
-            scores[i, j] = ruzicka_similarity_sparse(
+            scores[i, j] = ruzicka_similarity_sparse_numba(
                 references[i][0], references[i][1],
                 queries[j][0], queries[j][1])
     return scores
