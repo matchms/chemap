@@ -126,13 +126,14 @@ def prepare_sparse_vector(
     return keys, values
 
 
-def compute_fingerprints(
-        compounds,
+def compute_fingerprints_from_smiles(
+        smiles_lst,
         fpgen,
         count=True,
         sparse=True,
         bit_scaling=None,
         bit_weighing=None,
+        progress_bar=False,
         ):
     if sparse:
         fp_generator = SparseFingerprintGenerator(fpgen)
@@ -140,26 +141,16 @@ def compute_fingerprints(
         fp_generator = FingerprintGenerator(fpgen)
     
     fingerprints = []
-    for inchikey, row in tqdm(compounds.iterrows(), total=len(compounds)):
+    for i, smiles in tqdm(enumerate(smiles_lst), total=len(smiles_lst), disable=(not progress_bar)):
         if sparse:
-            fp = fp_generator.fingerprint_from_smiles(row.smiles, count, bit_scaling, bit_weighing)
+            fp = fp_generator.fingerprint_from_smiles(smiles, count, bit_scaling, bit_weighing)
         else:
-            fp = fp_generator.fingerprint_from_smiles(row.smiles, count)
+            fp = fp_generator.fingerprint_from_smiles(smiles, count)
         if fp is None:
-            print(f"Missing fingerprint for {inchikey}: {row.smiles}")
+            print(f"Missing fingerprint for element {i}: {smiles}")
         else:
             fingerprints.append(fp)
     return fingerprints
-
-
-def fingerprint_from_smiles_wrapper(smiles, fpgen, count=False):
-    try:
-        mol = Chem.MolFromSmiles(smiles)
-        if count:
-            return fpgen.GetCountFingerprintAsNumPy(mol)
-        return fpgen.GetFingerprintAsNumPy(mol)
-    except:
-        return None
 
 
 @numba.njit
