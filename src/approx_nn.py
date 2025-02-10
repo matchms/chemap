@@ -31,7 +31,7 @@ from pynndescent import NNDescent
 from fingerprint_computation import compute_fingerprints_from_smiles
 
 
-def compute_approx_nearest_neighbors(
+def compound_nearest_neighbors(
     smiles: List[str], k_pca: int = 500, k_morgan: int = 100
 ) -> Tuple[Any, Any]:
     """
@@ -72,12 +72,20 @@ def compute_approx_nearest_neighbors(
     )
     print(f"Took: {(time.time() - t_start):.4f} s.")
 
+    order, scores = compute_approx_nearest_neighbors(fingerprints_morgan3_count_1024, fingerprints_morgan3_count_sparse, k_pca, k_morgan)
+    return order, scores
+
+
+def compute_approx_nearest_neighbors(
+    fingerprints_coarse, fingerprints_fine, k_pca: int = 500, k_morgan: int = 100
+) -> Tuple[Any, Any]:
+
     t_start = time.time()
     print(">" * 20, "Compute PCA vectors")
     pca = PCA(n_components=100)
     scaler = StandardScaler()
     pipe = Pipeline(steps=[("scaler", scaler), ("pca", pca)])
-    pca_vectors = pipe.fit_transform(fingerprints_morgan3_count_1024)
+    pca_vectors = pipe.fit_transform(fingerprints_coarse)
     print(f"Took: {(time.time() - t_start):.4f} s.")
 
     t_start = time.time()
@@ -88,8 +96,7 @@ def compute_approx_nearest_neighbors(
     t_start = time.time()
     print(">" * 20, f"Build Ruzicka based NN-graph ({k_morgan} neighbors)")
     order, scores = ruzicka_candidate_search(
-        fingerprints_morgan3_count_sparse,
-        fingerprints_morgan3_count_sparse,
+        fingerprints_fine, fingerprints_fine,
         ann_graph.neighbor_graph[0],
         k_morgan,
     )
