@@ -2,6 +2,7 @@ import itertools
 from typing import List, Set, Dict, Iterable, Optional, Tuple
 from collections import defaultdict, Counter
 from multiprocessing import Pool
+from multiprocessing.dummy import Pool as ThreadPool
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -96,7 +97,7 @@ class MAP4neo:
         np.ndarray
             Array of fingerprints.
         """
-        with Pool(number_of_threads) as pool:
+        with ThreadPool(number_of_threads) as pool:
             fingerprints: np.ndarray = np.empty(
                 (len(mols), self.dimensions), dtype=np.uint8
             )
@@ -107,6 +108,7 @@ class MAP4neo:
             pool.close()
             pool.join()
         return fingerprints
+
 
     def visualize(
         self,
