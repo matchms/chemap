@@ -74,6 +74,30 @@ class MAP4neo:
         atom_env_pairs: Set[str] = self._calculate(mol)
         return self._fold(atom_env_pairs)
 
+    def calculate_sparse(self, mol: Mol, count: bool = False) -> np.ndarray:
+        """
+        Calculate the sparse MAP4neo fingerprint for the molecule.
+        
+        Parameters
+        ----------
+        mol : Mol
+            RDKit molecule.
+        
+        Returns
+        -------
+        np.ndarray
+            The folded fingerprint.
+        """
+        if count:
+            atom_env_pairs = self._calculate(mol, count)
+            bits_hashed = np.sort(self.encoder.hash([s.encode("utf-8") for s in list(atom_env_pairs.keys())]))
+            counts = np.array(list(atom_env_pairs.values()))
+            order = np.argsort(bits_hashed)
+            return bits_hashed[order], counts[order]
+        else:
+            atom_env_pairs: Set[str] = self._calculate(mol, count)
+            return np.sort(self.encoder.hash(atom_env_pairs))
+
     def calculate_many(
         self,
         mols: Iterable[Mol],
@@ -82,7 +106,7 @@ class MAP4neo:
     ) -> np.ndarray:
         """
         Calculate fingerprints for many molecules using parallel processing.
-        
+
         Parameters
         ----------
         mols : Iterable[Mol]
@@ -91,7 +115,7 @@ class MAP4neo:
             Number of threads. If None, uses the number of CPUs.
         verbose : bool, default=False
             Whether to show a progress bar.
-        
+
         Returns
         -------
         np.ndarray
@@ -108,6 +132,53 @@ class MAP4neo:
             pool.close()
             pool.join()
         return fingerprints
+
+    def calculate_many_sparse(
+        self,
+        mols: Iterable[Mol],
+        number_of_threads: Optional[int] = None,
+        count: bool = False,
+        verbose: bool = False,
+    ) -> np.ndarray:
+        """
+        Calculate sparse fingerprints for many molecules using parallel processing.
+
+        Parameters
+        ----------
+        mols : Iterable[Mol]
+            An iterable of RDKit molecules.
+        number_of_threads : Optional[int], default=None
+            Number of threads. If None, uses the number of CPUs.
+        count : bool, default=False
+            Whether to return the count variant (i.e. a tuple of (bits, counts)).
+        verbose : bool, default=False
+            Whether to show a progress bar.
+
+        Returns
+        -------
+        np.ndarray
+            An array (dtype=object) of sparse fingerprints.
+            If count==False, each element is a sorted numpy array of hashed bits.
+            If count==True, each element is a tuple (bits, counts), where both are sorted.
+        """
+        results = []
+        # Use ThreadPool to avoid pickling issues
+        with ThreadPool(number_of_threads) as pool:
+            if verbose:
+                from tqdm.auto import tqdm
+                iterator = tqdm(
+                    pool.imap(lambda m: self.calculate_sparse(m, count=count), mols),
+                    total=len(mols),
+                    desc="Calculating sparse fingerprints",
+                )
+            else:
+                iterator = pool.imap(lambda m: self.calculate_sparse(m, count=count), mols)
+            for fingerprint in iterator:
+                results.append(fingerprint)
+            pool.close()
+            pool.join()
+        # Return as a numpy array of type object since lengths can vary.
+        return np.array(results, dtype=object)
 
 
     def visualize(
@@ -223,7 +294,7 @@ class MAP4neo:
 
         return fig, ax
 
-    def _calculate(self, mol: Mol) -> Set[str]:
+    def _calculate(self, mol: Mol, count: bool = False) -> Set[str]:
         """
         For a given molecule, return the set of shingles.
         Shingles are built by pairing the Morgan fingerprint bits (for each radius 0...radius)
@@ -231,7 +302,7 @@ class MAP4neo:
         """
         # Get Morgan bits per atom (for radii 0 to self.radius)
         atoms_bits: Dict[int, List[Optional[str]]] = self._get_atom_bits(mol)
-        return self._all_pairs(mol, atoms_bits)
+        return self._all_pairs(mol, atoms_bits, count=count)
 
     def _fold(self, pairs: Set[str]) -> np.ndarray:
         """
@@ -292,7 +363,8 @@ class MAP4neo:
         return atoms_bits
 
     def _all_pairs(
-        self, mol: Mol, atoms_bits: Dict[int, List[Optional[str]]]
+        self, mol: Mol, atoms_bits: Dict[int, List[Optional[str]]],
+        count: bool = False
     ) -> Set[str]:
         """
         Build the set of shingle strings from pairs of atoms.
@@ -316,7 +388,10 @@ class MAP4neo:
         Set[str]
             The set of shingle bytes.
         """
-        atom_pairs: Set[str] = set()
+        if count:
+            atom_pairs = {}
+        else:
+            atom_pairs: Set[str] = set()
         distance_matrix = GetDistanceMatrix(mol)
         num_atoms = mol.GetNumAtoms()
         shingle_dict = defaultdict(int)
@@ -336,5 +411,11 @@ class MAP4neo:
                 if self.include_duplicated_shingles:
                     shingle_dict[shingle] += 1
                     shingle = f"{shingle}|{shingle_dict[shingle]}"
-                atom_pairs.add(shingle.encode("utf-8"))
+                if count:
+                    if shingle in atom_pairs:
+                        atom_pairs[shingle] += 1
+                    else:
+                        atom_pairs[shingle] = 1
+                else:
+                    atom_pairs.add(shingle.encode("utf-8"))
         return atom_pairs
