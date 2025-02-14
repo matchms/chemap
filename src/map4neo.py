@@ -243,8 +243,7 @@ class MAP4neo:
         for bit, atom_rad_list in bitInfo.items():
             for atom_idx, rad in atom_rad_list:
                 if rad <= self.radius:
-                    # Store the bit as a string; typically each (atom, radius)
-                    # will contribute one bit.
+                    # Store the bit as a string;
                     atoms_bits[atom_idx][rad] = str(bit)
         return atoms_bits
 
