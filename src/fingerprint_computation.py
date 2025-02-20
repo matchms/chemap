@@ -174,8 +174,7 @@ def count_fingerprint_keys(fingerprints):
     (one for counts, one for the first fingerprint index) for fast lookup.
     
     Parameters:
-        fingerprints (list of tuples): Each tuple contains two numpy arrays:
-            (keys, values) for a fingerprint.
+        fingerprints (list of bits).
     
     Returns:
         A tuple of 3 Numpy arrays (unique_keys, counts, first_instances) where:
@@ -188,14 +187,13 @@ def count_fingerprint_keys(fingerprints):
     first_instance = typed.Dict.empty(key_type=types.int64, value_type=types.int32)
     
     # Loop over each fingerprint.
-    for i in range(len(fingerprints)):
-        keys, _ = fingerprints[i]
-        for key in keys:
-            if key in counts:
-                counts[key] += 1
+    for i, fp_bits in enumerate(fingerprints):
+        for bit in fp_bits:
+            if bit in counts:
+                counts[bit] += 1
             else:
-                counts[key] = 1
-                first_instance[key] = i
+                counts[bit] = 1
+                first_instance[bit] = i
     
     # Allocate arrays to hold the results.
     n = len(counts)
