@@ -18,6 +18,9 @@ def jaccard_similarity_matrix_weighted(references: np.ndarray, queries: np.ndarr
     queries
         Query vectors as 2D numpy array. Expects that vector_i corresponds to
         queries[i, :].
+    weights
+        weighting factor as 1D numpy array. Contains non-negative weights that
+        define the importance of each feature in the similarity computation.
 
     Returns
     -------
@@ -86,6 +89,9 @@ def jaccard_index_weighted(u: np.ndarray, v: np.ndarray, weights: np.ndarray) ->
         Input array. Expects boolean vector.
     v :
         Input array. Expects boolean vector.
+    weights :
+        1D array of non-negative floats. Specifies the weight for each dimension; must
+        be the same length as `u` and `v`.
 
     Returns
     -------
