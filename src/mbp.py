@@ -16,7 +16,7 @@ from rdkit.Chem import MolToSmiles, Mol
 from rdkit.Chem import AllChem
 from rdkit.Chem.rdmolops import GetDistanceMatrix
 
-from mhfp.encoder import MHFPEncoder  # external dependency
+from mhfp.encoder import MHFPEncoder
 
 
 class MBP:
