@@ -366,6 +366,8 @@ def ruzicka_similarity_matrix(references: np.ndarray, queries: np.ndarray) -> np
         Matrix of all-vs-all similarity scores. scores[i, j] will contain the score
         between the vectors references[i, :] and queries[j, :].
     """
+    assert references.shape[1] == queries.shape[1], "Vector sizes do not match!"
+
     size1 = references.shape[0]
     size2 = queries.shape[0]
     scores = np.zeros((size1, size2)) #, dtype=np.float32)
