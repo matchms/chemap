@@ -198,16 +198,16 @@ def jaccard_similarity_matrix_sparse(
 
 
 @numba.njit
-def ruzicka_similarity(A, B):
+def generalized_tanimoto_similarity(A, B):
     """
-    Calculate the Ruzicka similarity between two count vectors.
+    Calculate the generalized Tanimoto similarity between two count vectors.
     
     Parameters:
     A (array-like): First count vector.
     B (array-like): Second count vector.
     
     Returns:
-    float: Ruzicka similarity.
+    float: Tanimoto similarity.
     """
     
     min_sum = np.sum(np.minimum(A, B))
@@ -216,9 +216,9 @@ def ruzicka_similarity(A, B):
     return min_sum / max_sum
 
 
-def ruzicka_similarity_matrix_sparse_all_vs_all(fingerprints) -> np.ndarray:
+def generalized_tanimoto_similarity_matrix_sparse_all_vs_all(fingerprints) -> np.ndarray:
     """
-    Calculate the Ruzicka similarity between all sparse fingerprints.
+    Calculate the generalized Tanimoto similarity between all sparse fingerprints.
     """
     mapping = occupied_bit_mapping(fingerprints)
     X = sparse_fingerprint_to_csr(fingerprints, mapping)
@@ -232,9 +232,9 @@ def ruzicka_similarity_matrix_sparse_all_vs_all(fingerprints) -> np.ndarray:
     return compute_ruzicka_from_manhattan_symmetric(norms, manhattan)
 
 
-def ruzicka_similarity_matrix_sparse(fingerprints_1, fingerprints_2) -> np.ndarray:
+def generalized_tanimoto_similarity_matrix_sparse(fingerprints_1, fingerprints_2) -> np.ndarray:
     """
-    Calculate the Ruzicka similarity between sparse fingerprints_1 and fingerprints_2.
+    Calculate the generalized Tanimoto similarity between sparse fingerprints_1 and fingerprints_2.
     """
     mapping = occupied_bit_mapping(fingerprints_1 + fingerprints_2)
     X1 = sparse_fingerprint_to_csr(fingerprints_1, mapping)
@@ -247,7 +247,7 @@ def ruzicka_similarity_matrix_sparse(fingerprints_1, fingerprints_2) -> np.ndarr
     # Compute pairwise Manhattan distances.
     manhattan = pairwise_distances(X1, X2, metric='manhattan')
 
-    return compute_ruzicka_from_manhattan(norms1, norms2, manhattan)
+    return compute_generalized_tanimoto_from_manhattan(norms1, norms2, manhattan)
 
 
 def occupied_bit_mapping(fingerprints_sparse):
@@ -282,38 +282,38 @@ def sparse_fingerprint_to_csr(fingerprints_sparse, mapping):
 
 
 @numba.njit(parallel=True, fastmath=True)
-def compute_ruzicka_from_manhattan_symmetric(norms, manhattan):
+def compute_generalized_tanimoto_from_manhattan_symmetric(norms, manhattan):
     n = norms.shape[0]
-    ruzicka = np.empty((n, n), dtype=norms.dtype)
+    tanimoto = np.empty((n, n), dtype=norms.dtype)
     for i in numba.prange(n):
         for j in range(n):
             union = norms[i] + norms[j] + manhattan[i, j]
             if union > 0:
-                ruzicka[i, j] = (norms[i] + norms[j] - manhattan[i, j]) / union
+                tanimoto[i, j] = (norms[i] + norms[j] - manhattan[i, j]) / union
             else:
-                ruzicka[i, j] = 1.0
-    return ruzicka
+                tanimoto[i, j] = 1.0
+    return tanimoto
 
 
 @numba.njit(parallel=True, fastmath=True)
-def compute_ruzicka_from_manhattan(norms1, norms2, manhattan):
+def compute_generalized_tanimoto_from_manhattan(norms1, norms2, manhattan):
     n = norms1.shape[0]
     m = norms2.shape[0]
-    ruzicka = np.empty((n, m), dtype=norms1.dtype)
+    tanimoto = np.empty((n, m), dtype=norms1.dtype)
     for i in numba.prange(n):
         for j in range(m):
             union = norms1[i] + norms2[j] + manhattan[i, j]
             if union > 0:
-                ruzicka[i, j] = (norms1[i] + norms2[j] - manhattan[i, j]) / union
+                tanimoto[i, j] = (norms1[i] + norms2[j] - manhattan[i, j]) / union
             else:
-                ruzicka[i, j] = 1.0
-    return ruzicka
+                tanimoto[i, j] = 1.0
+    return tanimoto
 
 
 @numba.njit
-def ruzicka_similarity_sparse_numba(keys1, values1, keys2, values2) -> float:
+def generalized_tanimoto_similarity_sparse_numba(keys1, values1, keys2, values2) -> float:
     """
-    Calculate the Ruzicka similarity between two sparse count vectors.
+    Calculate the generalized Tanimoto similarity between two sparse count vectors.
 
     Parameters:
     keys1, values1 (array-like): Keys and values for the first sparse vector.
@@ -348,8 +348,9 @@ def ruzicka_similarity_sparse_numba(keys1, values1, keys2, values2) -> float:
 
 
 @numba.jit(nopython=True, fastmath=True, parallel=True)
-def ruzicka_similarity_matrix(references: np.ndarray, queries: np.ndarray) -> np.ndarray:
-    """Returns matrix of Ruzicka similarity between all-vs-all vectors of references and queries.
+def generalized_tanimoto_similarity_matrix(references: np.ndarray, queries: np.ndarray) -> np.ndarray:
+    """Returns matrix of generalized Tanimoto similarity between all-vs-all vectors
+    of references and queries.
 
     Parameters
     ----------
@@ -373,14 +374,14 @@ def ruzicka_similarity_matrix(references: np.ndarray, queries: np.ndarray) -> np
     scores = np.zeros((size1, size2)) #, dtype=np.float32)
     for i in prange(size1):
         for j in range(size2):
-            scores[i, j] = ruzicka_similarity(references[i, :], queries[j, :])
+            scores[i, j] = generalized_tanimoto_similarity(references[i, :], queries[j, :])
     return scores
 
 
 @numba.jit(nopython=True, fastmath=True, parallel=True)
-def ruzicka_similarity_matrix_sparse_numba(
+def generalized_tanimoto_similarity_matrix_sparse_numba(
     references: list, queries: list) -> np.ndarray:
-    """Returns matrix of Ruzicka similarity between all-vs-all vectors of references and queries.
+    """Returns matrix of generalized Tanimoto similarity between all-vs-all vectors of references and queries.
 
     Parameters
     ----------
@@ -400,16 +401,16 @@ def ruzicka_similarity_matrix_sparse_numba(
     scores = np.zeros((size1, size2))
     for i in prange(size1):
         for j in range(size2):
-            scores[i, j] = ruzicka_similarity_sparse_numba(
+            scores[i, j] = generalized_tanimoto_similarity_sparse_numba(
                 references[i][0], references[i][1],
                 queries[j][0], queries[j][1])
     return scores
 
 
 @numba.njit
-def ruzicka_similarity_weighted(A, B, weights):
+def generalized_tanimoto_similarity_weighted(A, B, weights):
     """
-    Calculate the weighted Ruzicka similarity between two count vectors.
+    Calculate the weighted generarlized Tanimoto similarity between two count vectors.
     
     Parameters:
     ----------
@@ -418,7 +419,7 @@ def ruzicka_similarity_weighted(A, B, weights):
         weights: weights for every vector bit
     
     Returns:
-    float: Ruzicka similarity.
+    float: Tanimoto similarity.
     """
     
     min_sum = np.sum(np.minimum(A, B) * weights)
@@ -428,8 +429,8 @@ def ruzicka_similarity_weighted(A, B, weights):
 
 
 @numba.jit(nopython=True, fastmath=True, parallel=True)
-def ruzicka_similarity_matrix_weighted(references: np.ndarray, queries: np.ndarray, weights: np.ndarray) -> np.ndarray:
-    """Returns matrix of Ruzicka similarity between all-vs-all vectors of references and queries.
+def generalized_tanimoto_similarity_matrix_weighted(references: np.ndarray, queries: np.ndarray, weights: np.ndarray) -> np.ndarray:
+    """Returns matrix of generalized Tanimoto similarity between all-vs-all vectors of references and queries.
 
     Parameters
     ----------
@@ -451,5 +452,5 @@ def ruzicka_similarity_matrix_weighted(references: np.ndarray, queries: np.ndarr
     scores = np.zeros((size1, size2)) #, dtype=np.float32)
     for i in prange(size1):
         for j in range(size2):
-            scores[i, j] = ruzicka_similarity_weighted(references[i, :], queries[j, :], weights)
+            scores[i, j] = generalized_tanimoto_similarity_weighted(references[i, :], queries[j, :], weights)
     return scores
