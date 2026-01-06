@@ -1,8 +1,10 @@
 import numpy as np
+from numpy.typing import NDArray
 import numba
 from numba import types, typed
 from rdkit import Chem
 from tqdm import tqdm
+from typing import Optional, Sequence, Tuple
 
 
 class FingerprintGenerator:
@@ -253,6 +255,106 @@ def count_fingerprint_keys(fingerprints):
     
     order = np.argsort(unique_keys)
     return unique_keys[order], count_arr[order], first_arr[order]
+
+
+def merge_fingerprints(
+    fingerprints: Sequence[Tuple[NDArray[np.integer], NDArray[np.floating]]],
+    weights: Optional[NDArray[np.floating]] = None,
+) -> Tuple[NDArray[np.integer], NDArray[np.floating]]:
+    """
+    Merge multiple sparse Morgan (count/TF-IDF) fingerprints into a single
+    weighted-average fingerprint.
+
+    Parameters
+    ----------
+    fingerprints :
+        Sequence of (bits, values) pairs.
+        - bits: 1D integer array of bit indices (non-zero entries)
+        - values: 1D float array of TF-IDF (or other) weights,
+          same length as `bits`.
+    weights :
+        Optional 1D array-like of length len(fingerprints) with one weight
+        per fingerprint. Each fingerprint's values are scaled by its weight,
+        then the merged fingerprint is normalized by the sum of all weights.
+
+        - If None, all fingerprints are weighted equally (weight = 1.0).
+
+    Returns
+    -------
+    merged_bits, merged_values :
+        - merged_bits: 1D integer array of unique bit indices
+        - merged_values: 1D float array of weighted-average values per bit
+          (sum over all weighted fingerprints, divided by sum(weights)).
+    """
+    n_fps = len(fingerprints)
+    if n_fps == 0:
+        # Return empty sparse fingerprint
+        return (
+            np.array([], dtype=np.int64),
+            np.array([], dtype=np.float64),
+        )
+
+    if weights is not None:
+        w = np.asarray(weights, dtype=np.float64).ravel()
+        if w.shape[0] != n_fps:
+            raise ValueError(
+                f"weights must have length {n_fps}, got {w.shape[0]}"
+            )
+        total_weight = float(w.sum())
+        if total_weight <= 0.0:
+            raise ValueError("Sum of weights must be positive.")
+    else:
+        # Equal weighting
+        w = None
+        total_weight = float(n_fps)
+
+    # Concatenate all indices and (weighted) values
+    bits_list = []
+    vals_list = []
+
+    for i, (bits, vals) in enumerate(fingerprints):
+        bits = np.asarray(bits)
+        vals = np.asarray(vals, dtype=np.float64)
+
+        if bits.shape[0] != vals.shape[0]:
+            raise ValueError(
+                f"Fingerprint {i}: bits and values must have same length, "
+                f"got {bits.shape[0]} and {vals.shape[0]}"
+            )
+
+        if w is not None:
+            vals = vals * w[i]
+
+        bits_list.append(bits)
+        vals_list.append(vals)
+
+    if not bits_list:
+        return (
+            np.array([], dtype=np.int64),
+            np.array([], dtype=np.float64),
+        )
+
+    all_bits = np.concatenate(bits_list)
+    all_vals = np.concatenate(vals_list)
+
+    if all_bits.size == 0:
+        return (
+            np.array([], dtype=np.int64),
+            np.array([], dtype=np.float64),
+        )
+
+    # Group by bit index and sum weighted values
+    unique_bits, inverse = np.unique(all_bits, return_inverse=True)
+    summed_vals = np.bincount(inverse, weights=all_vals)
+
+    # Weighted average: divide by sum of weights
+    avg_vals = summed_vals / total_weight
+
+    # Keep dtypes reasonably tight
+    merged_bits = unique_bits.astype(all_bits.dtype, copy=False)
+    merged_vals = avg_vals.astype(np.float32, copy=False)
+
+    return merged_bits, merged_vals
 
 
 ### ------------------------
