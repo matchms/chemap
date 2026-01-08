@@ -191,15 +191,37 @@ def _looks_like_rdkit_fpgen(fpgen: Any) -> bool:
 
 def _mol_from_smiles_robust(smiles: str) -> Optional["Chem.Mol"]:
     """
-    Parse SMILES into an RDKit Mol.
-
-    This is a compact version; you can swap in your extended sanitize=False retry logic if needed.
+    Parse SMILES into an RDKit Mol..
     """
     try:
         mol = Chem.MolFromSmiles(smiles)
-        return mol
-    except Exception:
-        return None
+        if mol is None:
+            raise ValueError("MolFromSmiles returned None with default sanitization.")
+    except Exception as e:
+        print(f"Error processing SMILES {smiles} with default sanitization: {e}")
+        print("Retrying with sanitize=False...")
+        try:
+            mol = Chem.MolFromSmiles(smiles, sanitize=False)
+            # Regenerate computed properties like implicit valence and ring information
+            mol.UpdatePropertyCache(strict=False)
+
+            # Apply several sanitization rules (taken from http://rdkit.org/docs/Cookbook.html)
+            Chem.SanitizeMol(
+                mol,
+                Chem.SanitizeFlags.SANITIZE_FINDRADICALS
+                | Chem.SanitizeFlags.SANITIZE_KEKULIZE
+                | Chem.SanitizeFlags.SANITIZE_SETAROMATICITY
+                | Chem.SanitizeFlags.SANITIZE_SETCONJUGATION
+                | Chem.SanitizeFlags.SANITIZE_SETHYBRIDIZATION
+                | Chem.SanitizeFlags.SANITIZE_SYMMRINGS,
+                catchErrors=True
+            )
+            if mol is None:
+                raise ValueError("MolFromSmiles returned None even with sanitize=False.")
+        except Exception as e2:
+            print(f"Error processing SMILES {smiles} with sanitize=False: {e2}")
+            return None
+    return mol
 
 
 def _infer_fp_size_folded(fpgen: Any, mol: "Chem.Mol", count: bool) -> int:
