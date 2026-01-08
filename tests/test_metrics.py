@@ -1,15 +1,15 @@
-import pytest
 import numpy as np
-
-from chemap.metrics import jaccard_index_sparse, jaccard_similarity_matrix
+import pytest
 from chemap.metrics import (
     generalized_tanimoto_similarity,
+    generalized_tanimoto_similarity_matrix,
+    generalized_tanimoto_similarity_matrix_sparse,
+    generalized_tanimoto_similarity_matrix_sparse_all_vs_all,
     generalized_tanimoto_similarity_sparse_numba,
+    jaccard_index_sparse,
+    jaccard_similarity_matrix,
     occupied_bit_mapping,
     sparse_fingerprint_to_csr,
-    generalized_tanimoto_similarity_matrix,
-    generalized_tanimoto_similarity_matrix_sparse_all_vs_all,
-    generalized_tanimoto_similarity_matrix_sparse,
 )
 
 
