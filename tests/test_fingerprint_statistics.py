@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 from chemap.fingerprint_statistics import (
-    sparse_fingerprint_bit_statistics,
+    unfolded_fingerprint_bit_statistics,
     unfolded_count_fingerprint_bit_statistics,
 )
 
@@ -12,17 +12,22 @@ def _as_index_fp(*bits: int) -> np.ndarray:
 
 
 # =============================================================================
-# sparse_fingerprint_bit_statistics (numba njit)
+# unfolded_fingerprint_bit_statistics (numba njit)
 # =============================================================================
 
 def test_sparse_bit_statistics_empty_input():
-    with pytest.raises(ValueError):
-        _, _, _ = sparse_fingerprint_bit_statistics([])
+    keys, counts, first = unfolded_fingerprint_bit_statistics([])
+    assert keys.dtype == np.int64
+    assert counts.dtype == np.int32
+    assert first.dtype == np.int32
+    assert keys.size == 0
+    assert counts.size == 0
+    assert first.size == 0
 
 
 def test_sparse_bit_statistics_single_fp_unique_bits_sorted_and_first_instance_zero():
     fps = [_as_index_fp(10, 3, 7)]
-    keys, counts, first = sparse_fingerprint_bit_statistics(fps)
+    keys, counts, first = unfolded_fingerprint_bit_statistics(fps)
 
     np.testing.assert_array_equal(keys, np.array([3, 7, 10], dtype=np.int64))
     np.testing.assert_array_equal(counts, np.array([1, 1, 1], dtype=np.int32))
@@ -35,7 +40,7 @@ def test_sparse_bit_statistics_multiple_fps_counts_and_first_instance():
         _as_index_fp(7, 10),
         _as_index_fp(10, 42),
     ]
-    keys, counts, first = sparse_fingerprint_bit_statistics(fps)
+    keys, counts, first = unfolded_fingerprint_bit_statistics(fps)
 
     # Keys must be sorted ascending
     np.testing.assert_array_equal(keys, np.array([3, 7, 10, 42], dtype=np.int64))
@@ -53,7 +58,7 @@ def test_sparse_bit_statistics_duplicate_bits_within_one_fp_are_counted_multiple
         _as_index_fp(5, 5, 5),
         _as_index_fp(5),
     ]
-    keys, counts, first = sparse_fingerprint_bit_statistics(fps)
+    keys, counts, first = unfolded_fingerprint_bit_statistics(fps)
 
     np.testing.assert_array_equal(keys, np.array([5], dtype=np.int64))
     np.testing.assert_array_equal(counts, np.array([4], dtype=np.int32))
@@ -67,7 +72,7 @@ def test_sparse_bit_statistics_handles_empty_fingerprints_in_list():
         _as_index_fp(),          # empty fp at index 2
         _as_index_fp(2, 3, 2),   # index 3 (note duplicate 2)
     ]
-    keys, counts, first = sparse_fingerprint_bit_statistics(fps)
+    keys, counts, first = unfolded_fingerprint_bit_statistics(fps)
 
     np.testing.assert_array_equal(keys, np.array([1, 2, 3], dtype=np.int64))
     # counts: 1->1, 2->(1 from fp1 + 2 from fp3) = 3, 3->1
