@@ -3,8 +3,7 @@ import numpy as np
 from numba import typed, types
 
 
-@numba.njit
-def sparse_fingerprint_bit_statistics(fingerprints):
+def unfolded_fingerprint_bit_statistics(fingerprints):
     """
     Count the occurrences of bits across all sparse (indices-only) fingerprints
     using two dictionaries (one for counts, one for first index) for fast lookup.
@@ -19,6 +18,16 @@ def sparse_fingerprint_bit_statistics(fingerprints):
     counts : int32 array
     first_instances : int32 array
     """
+    tl = typed.List.empty_list(types.int64[:])
+    for fp_bits in fingerprints:
+        tl.append(np.asarray(fp_bits, dtype=np.int64))
+    return _unfolded_fingerprint_bit_statistics(tl)
+
+
+@numba.njit
+def _unfolded_fingerprint_bit_statistics(
+        fingerprints
+        ):
     counts = typed.Dict.empty(key_type=types.int64, value_type=types.int32)
     first_instance = typed.Dict.empty(key_type=types.int64, value_type=types.int32)
     
@@ -56,6 +65,6 @@ def unfolded_count_fingerprint_bit_statistics(
     fingerprints:
         List of sparse fingerprints (tuple of two arrays: keys and counts).
     """
-    return sparse_fingerprint_bit_statistics(
+    return unfolded_fingerprint_bit_statistics(
         [fp[0] for fp in fingerprints]  # only keys
     )
