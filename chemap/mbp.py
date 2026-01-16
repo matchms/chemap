@@ -1,14 +1,11 @@
 import itertools
-from typing import List, Set, Dict, Iterable, Optional, Tuple
 from collections import defaultdict
 from multiprocessing.dummy import Pool as ThreadPool
+from typing import Dict, Iterable, List, Optional, Set, Tuple
 import numpy as np
-
-from rdkit.Chem import Mol
-from rdkit.Chem import AllChem
-from rdkit.Chem.rdmolops import GetDistanceMatrix
-
 from mhfp.encoder import MHFPEncoder
+from rdkit.Chem import AllChem, Mol
+from rdkit.Chem.rdmolops import GetDistanceMatrix
 
 
 class MBP:

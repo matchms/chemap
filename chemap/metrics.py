@@ -1,7 +1,7 @@
 import numba
-from numba import prange
 import numpy as np
 import scipy.sparse as sp
+from numba import prange
 from sklearn.metrics import pairwise_distances
 
 
@@ -429,7 +429,11 @@ def generalized_tanimoto_similarity_weighted(A, B, weights):
 
 
 @numba.jit(nopython=True, fastmath=True, parallel=True)
-def generalized_tanimoto_similarity_matrix_weighted(references: np.ndarray, queries: np.ndarray, weights: np.ndarray) -> np.ndarray:
+def generalized_tanimoto_similarity_matrix_weighted(
+        references: np.ndarray,
+        queries: np.ndarray,
+        weights: np.ndarray
+        ) -> np.ndarray:
     """Returns matrix of generalized Tanimoto similarity between all-vs-all vectors of references and queries.
 
     Parameters

@@ -16,20 +16,17 @@ The general steps are:
 """
 
 import time
-from typing import List, Tuple, Any
-
-import numpy as np
+from typing import Any, List, Tuple
 import numba
-from numba import prange
-from sklearn.decomposition import PCA
-from sklearn.preprocessing import StandardScaler
-from sklearn.pipeline import Pipeline
-
-from rdkit.Chem import rdFingerprintGenerator
-from pynndescent import NNDescent
-
+import numpy as np
 from fingerprint_computation import compute_fingerprints_from_smiles
 from metrics import ruzicka_similarity_sparse_numba
+from numba import prange
+from pynndescent import NNDescent
+from rdkit.Chem import rdFingerprintGenerator
+from sklearn.decomposition import PCA
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
 
 
 def compound_nearest_neighbors(
@@ -73,7 +70,9 @@ def compound_nearest_neighbors(
     )
     print(f"Took: {(time.time() - t_start):.4f} s.")
 
-    order, scores = compute_approx_nearest_neighbors(fingerprints_morgan3_count_1024, fingerprints_morgan3_count_sparse, k_pca, k_morgan)
+    order, scores = compute_approx_nearest_neighbors(
+        fingerprints_morgan3_count_1024, fingerprints_morgan3_count_sparse, k_pca, k_morgan
+        )
     return order, scores
 
 

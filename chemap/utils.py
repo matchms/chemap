@@ -1,8 +1,8 @@
-import os
 import hashlib
-import numpy as np
+import os
 import urllib.request
 from pathlib import Path
+import numpy as np
 from scipy.stats import rankdata
 
 

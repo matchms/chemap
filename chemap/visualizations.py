@@ -1,7 +1,7 @@
-import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.colors import LogNorm
 import matplotlib.patheffects as path_effects
+import matplotlib.pyplot as plt
+import numpy as np
+from matplotlib.colors import LogNorm
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 

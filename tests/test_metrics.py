@@ -1,20 +1,15 @@
-import pytest
 import numpy as np
-import os
-import sys
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SRC_DIR = os.path.join(ROOT, "src")
-sys.path.insert(0, SRC_DIR)
-
-from metrics import jaccard_index_sparse, jaccard_similarity_matrix
-from metrics import (
+import pytest
+from chemap.metrics import (
     generalized_tanimoto_similarity,
+    generalized_tanimoto_similarity_matrix,
+    generalized_tanimoto_similarity_matrix_sparse,
+    generalized_tanimoto_similarity_matrix_sparse_all_vs_all,
     generalized_tanimoto_similarity_sparse_numba,
+    jaccard_index_sparse,
+    jaccard_similarity_matrix,
     occupied_bit_mapping,
     sparse_fingerprint_to_csr,
-    generalized_tanimoto_similarity_matrix,
-    generalized_tanimoto_similarity_matrix_sparse_all_vs_all,
-    generalized_tanimoto_similarity_matrix_sparse,
 )
 
 
