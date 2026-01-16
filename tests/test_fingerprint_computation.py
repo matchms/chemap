@@ -1,5 +1,6 @@
 from typing import Sequence
 import numpy as np
+import scipy.sparse as sp
 import pytest
 from chemap import FingerprintConfig, compute_fingerprints
 
@@ -61,8 +62,9 @@ class FakeRDKitFPGen:
         sparse_dict: dict[int, int] | None = None,
     ):
         self._dense_fp = np.array([0, 1, 1, 0], dtype=np.int32) if dense_fp is None else np.asarray(dense_fp)
-        self._dense_count_fp = np.array([0, 2, 5, 0],
-                                        dtype=np.int32) if dense_count_fp is None else np.asarray(dense_count_fp)
+        self._dense_count_fp = (
+            np.array([0, 2, 5, 0], dtype=np.int32) if dense_count_fp is None else np.asarray(dense_count_fp)
+        )
         self._sparse = {1: 2, 2: 5} if sparse_dict is None else dict(sparse_dict)
 
     def GetFingerprintAsNumPy(self, mol):
@@ -103,9 +105,9 @@ class FakeTransformer:
     so any test behavior MUST be encoded in get_params() keys.
 
     Parameters (all included in get_params):
-      - sparse: bool       (skfp: dense vs CSR; your code forces sparse=False)
+      - sparse: bool       (skfp: dense vs CSR; your code sets based on return_csr when folded=True)
       - verbose: int       (your code sets based on show_progress)
-      - variant: str|None  (required for ragged mode; your code sets to "raw_bits")
+      - variant: str|None  (required for unfolded mode; your code sets to "raw_bits")
       - mode: str          (controls deterministic output in transform)
       - n_features: int    (output feature dimension for most modes)
     """
@@ -113,7 +115,7 @@ class FakeTransformer:
     def __init__(
         self,
         *,
-        sparse: bool = True,
+        sparse: bool = False,
         verbose: int = 0,
         variant: str | None = None,
         mode: str = "onehot",
@@ -135,42 +137,42 @@ class FakeTransformer:
         mode = self._params["mode"]
         d = int(self._params["n_features"])
         verbose = int(self._params["verbose"])
-        sparse = bool(self._params["sparse"])
+        sparse_flag = bool(self._params["sparse"])
         variant = self._params.get("variant", None)
 
         if mode == "check_sparse_verbose":
-            # Used to verify your adapter forced sparse=False and set verbose properly.
-            if (sparse is False) and (verbose == 0):
+            # Verifies adapter sets verbose and (for folded=True) toggles sparse based on return_csr.
+            # Return shape/value depend on (sparse_flag, verbose).
+            if (sparse_flag is False) and (verbose == 0):
                 return np.array([[1, 2], [3, 4]], dtype=np.float32)
+            if (sparse_flag is True) and (verbose == 1):
+                # CSR path returns a CSR matrix
+                return sp.csr_matrix(np.array([[5, 6], [7, 8]], dtype=np.float32))
             return np.array([[9, 9], [9, 9]], dtype=np.float32)
 
         if mode == "check_verbose":
-            # Used to verify your adapter sets verbose=1 when show_progress=True.
             if verbose == 1:
                 return np.array([[1, 0], [0, 1]], dtype=np.float32)
             return np.array([[0, 0], [0, 0]], dtype=np.float32)
 
         if mode == "fixed_02_30":
-            # Used for scaling test
             assert n == 2
             return np.array([[0, 2], [3, 0]], dtype=np.float32)
 
         if mode == "fixed_123":
-            # Used for dense weights test
             assert n == 1
             return np.array([[1, 2, 3]], dtype=np.float32)
 
-        if mode == "ragged_binary":
-            # Used for ragged binary; only correct when variant has been set to raw_bits by adapter.
+        if mode == "unfolded_binary":
+            # Only correct when variant has been set to raw_bits by adapter.
             if variant != "raw_bits":
-                # distinguish failure mode clearly
                 return np.zeros((n, d), dtype=np.float32)
             M = np.zeros((n, d), dtype=np.float32)
             M[0, 1] = 1.0
             M[0, 4] = 1.0
             return M
 
-        if mode == "ragged_count":
+        if mode == "unfolded_count":
             if variant != "raw_bits":
                 return np.zeros((n, d), dtype=np.float32)
             M = np.zeros((n, d), dtype=np.float32)
@@ -203,26 +205,26 @@ def test_validate_scaling_rejects_unknown():
         compute_fingerprints(["CCO"], DummyUnsupported(), cfg)
 
 
-def test_validate_dense_rejects_ragged_weights():
-    cfg = FingerprintConfig(sparse=False, ragged_weights={1: 2.0})
-    with pytest.raises(ValueError, match="ragged_weights"):
+def test_unfolded_rejects_return_csr_true():
+    cfg = FingerprintConfig(folded=False, return_csr=True)
+    with pytest.raises(ValueError, match="return_csr"):
         compute_fingerprints(["CCO"], DummyUnsupported(), cfg)
 
 
-def test_validate_ragged_rejects_dense_weights():
-    cfg = FingerprintConfig(sparse=True, dense_weights=np.ones(10, dtype=np.float32))
-    with pytest.raises(ValueError, match="dense_weights"):
+def test_unfolded_rejects_folded_weights():
+    cfg = FingerprintConfig(folded=False, folded_weights=np.ones(10, dtype=np.float32))
+    with pytest.raises(ValueError, match="folded_weights"):
         compute_fingerprints(["CCO"], DummyUnsupported(), cfg)
 
 
-def test_validate_ragged_rejects_ragged_weights_when_binary():
-    cfg = FingerprintConfig(sparse=True, count=False, ragged_weights={1: 2.0})
-    with pytest.raises(ValueError, match="ragged_weights"):
+def test_unfolded_rejects_unfolded_weights_when_binary():
+    cfg = FingerprintConfig(folded=False, count=False, unfolded_weights={1: 2.0})
+    with pytest.raises(ValueError, match="unfolded_weights"):
         compute_fingerprints(["CCO"], DummyUnsupported(), cfg)
 
 
-def test_validate_dense_weights_must_be_1d():
-    cfg = FingerprintConfig(sparse=False, dense_weights=np.ones((2, 2), dtype=np.float32))
+def test_validate_folded_weights_must_be_1d():
+    cfg = FingerprintConfig(folded=True, folded_weights=np.ones((2, 2), dtype=np.float32))
     with pytest.raises(ValueError, match="1D"):
         compute_fingerprints(["CCO"], DummyUnsupported(), cfg)
 
@@ -236,9 +238,9 @@ def test_unsupported_fpgen_typeerror():
 # RDKit backend via fake fpgen (deterministic numerics)
 # =============================================================================
 
-def test_rdkit_dense_binary_dtype_and_values():
+def test_rdkit_folded_dense_binary_dtype_and_values():
     fpgen = FakeRDKitFPGen(dense_fp=np.array([0, 1, 0, 1], dtype=np.int32))
-    cfg = FingerprintConfig(count=False, sparse=False)
+    cfg = FingerprintConfig(count=False, folded=True, return_csr=False)
 
     X = compute_fingerprints(["CCO", "CCC"], fpgen, cfg)
     assert isinstance(X, np.ndarray)
@@ -247,9 +249,9 @@ def test_rdkit_dense_binary_dtype_and_values():
     np.testing.assert_array_equal(X[0], np.array([0, 1, 0, 1], dtype=np.float32))
 
 
-def test_rdkit_dense_count_scaling_log():
+def test_rdkit_folded_dense_count_scaling_log():
     fpgen = FakeRDKitFPGen(dense_count_fp=np.array([0, 2, 5, 1], dtype=np.int32))
-    cfg = FingerprintConfig(count=True, sparse=False, scaling="log")
+    cfg = FingerprintConfig(count=True, folded=True, return_csr=False, scaling="log")
 
     X = compute_fingerprints(["CCO"], fpgen, cfg)
     expected = np.log1p(np.array([0, 2, 5, 1], dtype=np.float32))
@@ -257,27 +259,27 @@ def test_rdkit_dense_count_scaling_log():
     np.testing.assert_allclose(X[0], expected, rtol=1e-6, atol=1e-6)
 
 
-def test_rdkit_dense_count_dense_weights():
+def test_rdkit_folded_dense_count_folded_weights():
     fpgen = FakeRDKitFPGen(dense_count_fp=np.array([1, 2, 3, 4], dtype=np.int32))
     w = np.array([1.0, 2.0, 0.5, 10.0], dtype=np.float32)
-    cfg = FingerprintConfig(count=True, sparse=False, dense_weights=w)
+    cfg = FingerprintConfig(count=True, folded=True, return_csr=False, folded_weights=w)
 
     X = compute_fingerprints(["CCO"], fpgen, cfg)
     expected = np.array([1, 2, 3, 4], dtype=np.float32) * w
     np.testing.assert_allclose(X[0], expected, rtol=1e-6, atol=1e-6)
 
 
-def test_rdkit_dense_weights_shape_mismatch_raises():
+def test_rdkit_folded_weights_shape_mismatch_raises():
     fpgen = FakeRDKitFPGen(dense_count_fp=np.array([1, 2, 3, 4], dtype=np.int32))
-    cfg = FingerprintConfig(count=True, sparse=False, dense_weights=np.ones(3, dtype=np.float32))
+    cfg = FingerprintConfig(count=True, folded=True, return_csr=False, folded_weights=np.ones(3, dtype=np.float32))
 
-    with pytest.raises(ValueError, match="dense_weights length"):
+    with pytest.raises(ValueError, match="folded_weights length"):
         _ = compute_fingerprints(["CCO"], fpgen, cfg)
 
 
-def test_rdkit_ragged_binary_sorted_int64():
+def test_rdkit_unfolded_binary_sorted_int64():
     fpgen = FakeRDKitFPGen(sparse_dict={10: 1, 3: 2, 7: 5})
-    cfg = FingerprintConfig(count=False, sparse=True)
+    cfg = FingerprintConfig(count=False, folded=False)
 
     out = compute_fingerprints(["CCO"], fpgen, cfg)
     assert isinstance(out, list)
@@ -287,13 +289,13 @@ def test_rdkit_ragged_binary_sorted_int64():
     assert list(keys) == [3, 7, 10]
 
 
-def test_rdkit_ragged_count_scaling_and_weights():
+def test_rdkit_unfolded_count_scaling_and_weights():
     fpgen = FakeRDKitFPGen(sparse_dict={5: 2, 2: 4})
     cfg = FingerprintConfig(
         count=True,
-        sparse=True,
+        folded=False,
         scaling="log",
-        ragged_weights={2: 10.0},  # 5 defaults to 1.0
+        unfolded_weights={2: 10.0},  # 5 defaults to 1.0
     )
 
     out = compute_fingerprints(["CCO"], fpgen, cfg)
@@ -305,41 +307,53 @@ def test_rdkit_ragged_count_scaling_and_weights():
     assert vals.dtype == np.float32
 
 
+def test_rdkit_folded_csr_returns_csr_and_values():
+    fpgen = FakeRDKitFPGen(dense_fp=np.array([0, 1, 0, 1], dtype=np.int32))
+    cfg = FingerprintConfig(count=False, folded=True, return_csr=True)
+
+    X = compute_fingerprints(["CCO", "CCC"], fpgen, cfg)
+    assert sp.issparse(X)
+    X = X.tocsr()
+    assert X.shape == (2, 4)
+    np.testing.assert_array_equal(X.toarray().astype(np.float32), np.array([[0, 1, 0, 1], [0, 1, 0, 1]], dtype=np.float32))
+
+
 # =============================================================================
 # Invalid SMILES handling (uses real RDKit SMILES parsing)
 # =============================================================================
 
-def test_rdkit_invalid_policy_drop_dense():
+def test_rdkit_invalid_policy_drop_folded_dense():
     fpgen = FakeRDKitFPGen(dense_fp=np.array([1, 0, 0, 0], dtype=np.int32))
-    cfg = FingerprintConfig(count=False, sparse=False, invalid_policy="drop")
+    cfg = FingerprintConfig(count=False, folded=True, return_csr=False, invalid_policy="drop")
 
-    X = compute_fingerprints(["this_is_not_a_smiles", "CCO"], fpgen, cfg)
+    X = compute_fingerprints(["C99", "CCO"], fpgen, cfg)
+    assert isinstance(X, np.ndarray)
     assert X.shape == (1, 4)  # invalid dropped
 
 
-def test_rdkit_invalid_policy_keep_dense_backfills_zeros():
+def test_rdkit_invalid_policy_keep_folded_dense_backfills_zeros():
     fpgen = FakeRDKitFPGen(dense_fp=np.array([1, 0, 0, 0], dtype=np.int32))
-    cfg = FingerprintConfig(count=False, sparse=False, invalid_policy="keep")
+    cfg = FingerprintConfig(count=False, folded=True, return_csr=False, invalid_policy="keep")
 
-    X = compute_fingerprints(["this_is_not_a_smiles", "CCO"], fpgen, cfg)
+    X = compute_fingerprints(["C99", "CCO"], fpgen, cfg)
     assert X.shape == (2, 4)
     np.testing.assert_array_equal(X[0], np.zeros(4, dtype=np.float32))
     np.testing.assert_array_equal(X[1], np.array([1, 0, 0, 0], dtype=np.float32))
 
 
-def test_rdkit_invalid_policy_keep_all_invalid_dense():
+def test_rdkit_invalid_policy_keep_all_invalid_folded_dense():
     fpgen = FakeRDKitFPGen()
-    cfg = FingerprintConfig(count=False, sparse=False, invalid_policy="keep")
+    cfg = FingerprintConfig(count=False, folded=True, return_csr=False, invalid_policy="keep")
 
-    X = compute_fingerprints(["bad1", "bad2"], fpgen, cfg)
+    X = compute_fingerprints(["C99", "C999"], fpgen, cfg)
     assert X.shape == (2, 0)  # all invalid -> (N, 0)
 
 
-def test_rdkit_invalid_policy_keep_ragged():
+def test_rdkit_invalid_policy_keep_unfolded():
     fpgen = FakeRDKitFPGen(sparse_dict={1: 2})
-    cfg = FingerprintConfig(count=True, sparse=True, invalid_policy="keep")
+    cfg = FingerprintConfig(count=True, folded=False, invalid_policy="keep")
 
-    out = compute_fingerprints(["this_is_not_a_smiles", "CCO"], fpgen, cfg)
+    out = compute_fingerprints(["C99", "CCO"], fpgen, cfg)
     assert len(out) == 2
     k0, v0 = out[0]
     assert k0.size == 0 and v0.size == 0
@@ -350,7 +364,7 @@ def test_rdkit_invalid_policy_keep_ragged():
 
 def test_rdkit_invalid_policy_raise():
     fpgen = FakeRDKitFPGen()
-    cfg = FingerprintConfig(count=False, sparse=False, invalid_policy="raise")
+    cfg = FingerprintConfig(count=False, folded=True, return_csr=False, invalid_policy="raise")
 
     with pytest.raises(ValueError, match="Invalid SMILES"):
         _ = compute_fingerprints(["this_is_not_a_smiles"], fpgen, cfg)
@@ -360,74 +374,61 @@ def test_rdkit_invalid_policy_raise():
 # sklearn/scikit-fingerprints backend via clone-safe fakes
 # =============================================================================
 
-def test_sklearn_dense_forces_sparse_false_and_sets_verbose_show_progress_false():
-    fp = FakeTransformer(
-        sparse=True,
-        verbose=123,
-        mode="check_sparse_verbose",
-        n_features=2,
-    )
-    cfg = FingerprintConfig(count=True, sparse=False)
-
-    X = compute_fingerprints(["A", "B"], fp, cfg, show_progress=False)
-    np.testing.assert_array_equal(X, np.array([[1, 2], [3, 4]], dtype=np.float32))
-
-
-def test_sklearn_dense_sets_verbose_show_progress_true():
+def test_sklearn_folded_dense_sets_verbose_show_progress_true():
     fp = FakeTransformer(
         sparse=False,
         verbose=0,
         mode="check_verbose",
         n_features=2,
     )
-    cfg = FingerprintConfig(count=True, sparse=False)
+    cfg = FingerprintConfig(count=True, folded=True, return_csr=False)
 
     X = compute_fingerprints(["A", "B"], fp, cfg, show_progress=True)
     np.testing.assert_array_equal(X, np.array([[1, 0], [0, 1]], dtype=np.float32))
 
 
-def test_sklearn_dense_scaling_log_applies_when_count_true():
+def test_sklearn_folded_dense_scaling_log_applies_when_count_true():
     fp = FakeTransformer(
         sparse=False,
         mode="fixed_02_30",
         n_features=2,
     )
-    cfg = FingerprintConfig(count=True, sparse=False, scaling="log")
+    cfg = FingerprintConfig(count=True, folded=True, return_csr=False, scaling="log")
 
     X = compute_fingerprints(["A", "B"], fp, cfg)
     expected = np.log1p(np.array([[0, 2], [3, 0]], dtype=np.float32)).astype(np.float32)
     np.testing.assert_allclose(X, expected, rtol=1e-6, atol=1e-6)
 
 
-def test_sklearn_dense_weights_applies():
+def test_sklearn_folded_dense_weights_applies():
     fp = FakeTransformer(
         sparse=False,
         mode="fixed_123",
         n_features=3,
     )
     w = np.array([1.0, 10.0, 0.5], dtype=np.float32)
-    cfg = FingerprintConfig(count=True, sparse=False, dense_weights=w)
+    cfg = FingerprintConfig(count=True, folded=True, return_csr=False, folded_weights=w)
 
     X = compute_fingerprints(["A"], fp, cfg)
     np.testing.assert_allclose(X[0], np.array([1, 20, 1.5], dtype=np.float32), rtol=1e-6, atol=1e-6)
 
 
-def test_sklearn_ragged_requires_variant():
-    fp = NoVariantTransformer(sparse=False, mode="ragged_binary", n_features=6)
-    cfg = FingerprintConfig(count=False, sparse=True)
+def test_sklearn_unfolded_requires_variant():
+    fp = NoVariantTransformer(sparse=False, mode="unfolded_binary", n_features=6)
+    cfg = FingerprintConfig(count=False, folded=False)
 
     with pytest.raises(NotImplementedError, match="variant"):
         _ = compute_fingerprints(["A"], fp, cfg)
 
 
-def test_sklearn_ragged_sets_variant_raw_bits_and_returns_ragged_binary():
+def test_sklearn_unfolded_sets_variant_raw_bits_and_returns_unfolded_binary():
     fp = FakeTransformer(
         sparse=False,
         variant="folded",
-        mode="ragged_binary",
+        mode="unfolded_binary",
         n_features=6,
     )
-    cfg = FingerprintConfig(count=False, sparse=True)
+    cfg = FingerprintConfig(count=False, folded=False)
 
     out = compute_fingerprints(["A"], fp, cfg)
     assert isinstance(out, list)
@@ -435,14 +436,14 @@ def test_sklearn_ragged_sets_variant_raw_bits_and_returns_ragged_binary():
     assert list(out[0]) == [1, 4]
 
 
-def test_sklearn_ragged_count_scaling_and_ragged_weights():
+def test_sklearn_unfolded_count_scaling_and_unfolded_weights():
     fp = FakeTransformer(
         sparse=False,
         variant="folded",
-        mode="ragged_count",
+        mode="unfolded_count",
         n_features=6,
     )
-    cfg = FingerprintConfig(count=True, sparse=True, scaling="log", ragged_weights={2: 10.0})
+    cfg = FingerprintConfig(count=True, folded=False, scaling="log", unfolded_weights={2: 10.0})
 
     out = compute_fingerprints(["A"], fp, cfg)
     keys, vals = out[0]
@@ -451,16 +452,30 @@ def test_sklearn_ragged_count_scaling_and_ragged_weights():
     np.testing.assert_allclose(vals, expected, rtol=1e-6, atol=1e-6)
 
 
+def test_sklearn_folded_csr_requests_sparse_from_transformer_and_returns_csr():
+    fp = FakeTransformer(
+        sparse=False,   # initial state; adapter should set sparse=True when return_csr=True
+        verbose=0,
+        mode="check_sparse_verbose",
+        n_features=2,
+    )
+    cfg = FingerprintConfig(count=True, folded=True, return_csr=True)
+
+    X = compute_fingerprints(["A", "B"], fp, cfg, show_progress=True)
+    assert sp.issparse(X)
+    np.testing.assert_array_equal(X.toarray().astype(np.float32), np.array([[5, 6], [7, 8]], dtype=np.float32))
+
+
 # =============================================================================
 # Optional real-RDKit integration smoke tests (skip if not available)
 # =============================================================================
 
 @pytest.mark.filterwarnings("ignore")
-def test_rdkit_morgan_dense_smoke():
+def test_rdkit_morgan_folded_dense_smoke():
     rdFingerprintGenerator = pytest.importorskip("rdkit.Chem.rdFingerprintGenerator")
 
     fpgen = rdFingerprintGenerator.GetMorganGenerator(radius=2, fpSize=1024)
-    cfg = FingerprintConfig(count=False, sparse=False, invalid_policy="drop")
+    cfg = FingerprintConfig(count=False, folded=True, return_csr=False, invalid_policy="drop")
 
     X = compute_fingerprints(["CCO", "c1ccccc1"], fpgen, cfg)
     assert isinstance(X, np.ndarray)
@@ -470,11 +485,11 @@ def test_rdkit_morgan_dense_smoke():
 
 
 @pytest.mark.filterwarnings("ignore")
-def test_rdkit_morgan_ragged_smoke_sorted_keys():
+def test_rdkit_morgan_unfolded_smoke_sorted_keys():
     rdFingerprintGenerator = pytest.importorskip("rdkit.Chem.rdFingerprintGenerator")
 
     fpgen = rdFingerprintGenerator.GetMorganGenerator(radius=2, fpSize=1024)
-    cfg = FingerprintConfig(count=True, sparse=True, invalid_policy="drop")
+    cfg = FingerprintConfig(count=True, folded=False, invalid_policy="drop")
 
     out = compute_fingerprints(["CCO", "c1ccccc1"], fpgen, cfg)
     assert isinstance(out, list)
