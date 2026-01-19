@@ -16,6 +16,7 @@ dependencies = [
     "rdkit>=2024.9.6",
     "scikit-fingerprints>=1.15.0",
     "tqdm>=4.67.1",
+    "pooch>=1.8.2",
 ]
 
 [dependency-groups]
