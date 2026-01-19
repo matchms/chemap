@@ -6,7 +6,7 @@ license = "MIT"
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = ">=3.12,<3.14"
+python = ">=3.11,<3.14"
 map4 = ">=1.1.3"
 numba = ">=0.61.2"
 numpy = ">=2.1.0"
