@@ -206,7 +206,7 @@ def _empty_unfolded_count() -> Tuple[np.ndarray, np.ndarray]:
 
 
 def _quick_smiles_check(smiles_lst: Sequence[str]) -> None:
-    regexp = r"^([^J][0-9ABCOHNMSPIFKiergalcons@+\-\[\]\(\)\\\/%=#$,.~&!]*)$"
+    regexp = r"^([^J][0-9a-zA-Z@+\-\[\]\(\)\\\/%=#$,.~&!]*)$"
     for s in smiles_lst:
         if s is None:
             raise ValueError(f"Invalid SMILES: {s}")
