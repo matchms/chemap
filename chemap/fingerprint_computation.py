@@ -3,9 +3,9 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Literal, Optional, Protocol, Sequence, Tuple, Union
 import numpy as np
 import scipy.sparse as sp
+from joblib import Parallel, delayed
 from rdkit import Chem
 from tqdm import tqdm
-from joblib import Parallel, delayed
 
 
 # -----------------------------
@@ -261,7 +261,9 @@ def _compute_mols_parallel(smiles: Sequence[str], n_jobs: int, show_progress: bo
     Compute RDKit molecules from SMILES in parallel.
     """
     if n_jobs == 1:
-        return [_mol_from_smiles_robust(s) for s in tqdm(smiles, disable=not show_progress, desc="Generating molecules")]
+        return [
+            _mol_from_smiles_robust(s) for s in tqdm(smiles, disable=not show_progress, desc="Generating molecules")
+        ]
 
     results = Parallel(n_jobs=n_jobs, batch_size="auto")(
         delayed(_mol_from_smiles_robust)(s)
