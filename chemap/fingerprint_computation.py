@@ -119,7 +119,7 @@ def compute_fingerprints(
         return _compute_rdkit(smiles, fpgen, config, show_progress=show_progress, n_jobs=n_jobs)
 
     if _looks_like_sklearn_transformer(fpgen):
-        return _compute_sklearn(smiles, fpgen, config, show_progress=show_progress)
+        return _compute_sklearn(smiles, fpgen, config, show_progress=show_progress, n_jobs=n_jobs)
 
     raise TypeError(
         "Unsupported fpgen. Expected an RDKit rdFingerprintGenerator-like object "
@@ -510,6 +510,7 @@ def _skfp_configure_output(
     cfg: FingerprintConfig,
     *,
     show_progress: bool,
+    n_jobs: int,
 ) -> SklearnTransformer:
     """
     Configure scikit-fingerprints/sklearn transformer to match (folded, return_csr).
@@ -523,6 +524,9 @@ def _skfp_configure_output(
 
     if "verbose" in params:
         updates["verbose"] = 1 if show_progress else 0
+
+    if "n_jobs" in params:
+        updates["n_jobs"] = n_jobs
 
     if not cfg.folded:
         if "variant" not in params:
@@ -554,8 +558,9 @@ def _compute_sklearn(
     cfg: FingerprintConfig,
     *,
     show_progress: bool = False,
+    n_jobs: int,
 ) -> FingerprintResult:
-    fp = _skfp_configure_output(fpgen, cfg, show_progress=show_progress)
+    fp = _skfp_configure_output(fpgen, cfg, show_progress=show_progress, n_jobs=n_jobs)
     X = fp.transform(smiles)
 
     if not cfg.folded:
