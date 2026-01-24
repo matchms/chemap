@@ -1,9 +1,7 @@
-from typing import Callable, Literal, Optional, Sequence, Tuple, Union, overload
+from typing import Literal, Optional, Sequence, Tuple, Union
 import numba
 import numpy as np
 import scipy.sparse as sp
-from numba import prange
-from sklearn.metrics import pairwise_distances
 
 
 # ---------------------------
@@ -267,10 +265,14 @@ def tanimoto_similarity_sparse(ind1, data1, ind2, data2) -> float:
 @numba.njit(parallel=True, fastmath=True, cache=True)
 def tanimoto_similarity_matrix_dense(references: np.ndarray, queries: np.ndarray) -> np.ndarray:
     """
-    Pairwise generalized Tanimoto similarity between two dense matrices:
-      references: (R, D)
-      queries:    (Q, D)
-    Returns: (R, Q)
+    Pairwise generalized Tanimoto similarity between two dense matrices.
+
+    Parameters
+    ----------
+    references
+        2D numpy array of shape (R, D).
+    queries
+        2D numpy array of shape (Q, D).
     """
     R = references.shape[0]
     Q = queries.shape[0]
@@ -285,8 +287,17 @@ def tanimoto_similarity_matrix_dense(references: np.ndarray, queries: np.ndarray
 # This is O(R*Q*avg_nnz_merge) and can be expensive for large R,Q.
 # For huge datasets prefer ANN (PyNNDescent/UMAP) with `tanimoto_distance_sparse`.
 @numba.njit(parallel=True, fastmath=True, cache=True)
-def tanimoto_similarity_matrix_unfolded_binary(references: Sequence[np.ndarray],
-                                              queries: Sequence[np.ndarray]) -> np.ndarray:
+def tanimoto_similarity_matrix_unfolded_binary(references, queries) -> np.ndarray:
+    """
+    Pairwise Tanimoto similarity between two sets of unfolded binary fingerprints.
+
+    Parameters
+    ----------
+    references
+        List of 1D numpy arrays of sorted bit indices (unique).
+    queries
+        List of 1D numpy arrays of sorted bit indices (unique).
+    """
     R = len(references)
     Q = len(queries)
     out = np.empty((R, Q), dtype=np.float32)
@@ -297,10 +308,26 @@ def tanimoto_similarity_matrix_unfolded_binary(references: Sequence[np.ndarray],
 
 
 @numba.njit(parallel=True, fastmath=True, cache=True)
-def tanimoto_similarity_matrix_unfolded_count(references_bits: Sequence[np.ndarray],
-                                             references_vals: Sequence[np.ndarray],
-                                             queries_bits: Sequence[np.ndarray],
-                                             queries_vals: Sequence[np.ndarray]) -> np.ndarray:
+def tanimoto_similarity_matrix_unfolded_count(
+        references_bits,
+        references_vals,
+        queries_bits,
+        queries_vals
+        ) -> np.ndarray:
+    """
+    Pairwise generalized Tanimoto similarity between two sets of unfolded count/weight fingerprints.
+
+    Parameters
+    ----------
+    references_bits
+        List of 1D numpy arrays of sorted bit indices (unique) for reference fingerprints.
+    references_vals
+        List of 1D numpy arrays of counts/weights for reference fingerprints.
+    queries_bits
+        List of 1D numpy arrays of sorted bit indices (unique) for query fingerprints.
+    queries_vals
+        List of 1D numpy arrays of counts/weights for query fingerprints.
+    """
     R = len(references_bits)
     Q = len(queries_bits)
     out = np.empty((R, Q), dtype=np.float32)
@@ -318,6 +345,7 @@ def tanimoto_similarity_matrix_unfolded_count(references_bits: Sequence[np.ndarr
 # ---------------------------
 
 def _as_1xD_csr(x: Union[np.ndarray, sp.csr_matrix]) -> sp.csr_matrix:
+    """Convert input to a 1xD csr_matrix."""
     if sp.isspmatrix_csr(x):
         if x.shape[0] == 1:
             return x
@@ -337,12 +365,22 @@ def tanimoto_similarity(
     kind: Optional[Literal["dense", "sparse", "unfolded-binary", "unfolded-count"]] = None,
 ) -> float:
     """
+    Function to compute Tanimoto similarity between two fingerprints/vectors. 
     Unified single-pair API.
 
-    - kind="dense": expects 1D arrays same length
-    - kind="sparse": expects 1xD csr_matrix for each
-    - kind="unfolded-binary": expects 1D bit arrays (sorted unique)
-    - kind="unfolded-count": expects (bits, counts) for each
+    Parameters
+    ----------
+    a
+        First fingerprint/vector.
+    b
+        Second fingerprint/vector.
+    kind
+        Optional specification of the representation type. If None, the function will attempt to infer the type.
+        Can be one of:
+        - kind="dense": expects 1D arrays same length
+        - kind="sparse": expects 1xD csr_matrix for each
+        - kind="unfolded-binary": expects 1D bit arrays (sorted unique)
+        - kind="unfolded-count": expects (bits, counts) for each
     """
     if kind is None:
         # best-effort inference
