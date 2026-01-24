@@ -1,8 +1,24 @@
+from typing import Callable, Literal, Optional, Sequence, Tuple, Union, overload
 import numba
 import numpy as np
 import scipy.sparse as sp
 from numba import prange
 from sklearn.metrics import pairwise_distances
+
+
+# ---------------------------
+# Terminology / Types
+# ---------------------------
+
+# Unfolded inputs
+UnfoldedBinary = np.ndarray
+UnfoldedCount = Tuple[np.ndarray, np.ndarray]
+UnfoldedFingerprint = Union[UnfoldedBinary, UnfoldedCount]
+
+# Dense / sparse fixed-size
+DenseVector = np.ndarray
+DenseMatrix = np.ndarray
+SparseMatrix = sp.csr_matrix
 
 
 @numba.njit
