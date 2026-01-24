@@ -2,6 +2,7 @@ from typing import Sequence
 import numpy as np
 import pytest
 import scipy.sparse as sp
+from sklearn.base import BaseEstimator, TransformerMixin
 from chemap import FingerprintConfig, compute_fingerprints
 
 
@@ -95,7 +96,7 @@ class DummyUnsupported:
 # Clone-safe sklearn/scikit-fingerprints transformer fakes
 # -----------------------------------------------------------------------------
 
-class FakeTransformer:
+class FakeTransformer(BaseEstimator, TransformerMixin):
     """
     Clone-safe sklearn/scikit-fingerprints-like transformer fake.
 
@@ -120,6 +121,7 @@ class FakeTransformer:
         variant: str | None = None,
         mode: str = "onehot",
         n_features: int = 6,
+        n_jobs: int = 1,
     ):
         self._params = {
             "sparse": sparse,
@@ -127,7 +129,11 @@ class FakeTransformer:
             "variant": variant,
             "mode": mode,
             "n_features": int(n_features),
+            "n_jobs": n_jobs,
         }
+
+    def fit(self, X, y=None):
+        return self
 
     def get_params(self, deep: bool = False):
         return dict(self._params)
@@ -398,7 +404,7 @@ def test_sklearn_folded_dense_scaling_log_applies_when_count_true():
     )
     cfg = FingerprintConfig(count=True, folded=True, return_csr=False, scaling="log")
 
-    X = compute_fingerprints(["A", "B"], fp, cfg)
+    X = compute_fingerprints(["C", "CC"], fp, cfg)
     expected = np.log1p(np.array([[0, 2], [3, 0]], dtype=np.float32)).astype(np.float32)
     np.testing.assert_allclose(X, expected, rtol=1e-6, atol=1e-6)
 
@@ -412,7 +418,7 @@ def test_sklearn_folded_dense_weights_applies():
     w = np.array([1.0, 10.0, 0.5], dtype=np.float32)
     cfg = FingerprintConfig(count=True, folded=True, return_csr=False, folded_weights=w)
 
-    X = compute_fingerprints(["A"], fp, cfg)
+    X = compute_fingerprints(["C"], fp, cfg)
     np.testing.assert_allclose(X[0], np.array([1, 20, 1.5], dtype=np.float32), rtol=1e-6, atol=1e-6)
 
 
@@ -433,7 +439,7 @@ def test_sklearn_unfolded_sets_variant_raw_bits_and_returns_unfolded_binary():
     )
     cfg = FingerprintConfig(count=False, folded=False)
 
-    out = compute_fingerprints(["A"], fp, cfg)
+    out = compute_fingerprints(["C"], fp, cfg)
     assert isinstance(out, list)
     assert out[0].dtype == np.int64
     assert list(out[0]) == [1, 4]
@@ -448,7 +454,7 @@ def test_sklearn_unfolded_count_scaling_and_unfolded_weights():
     )
     cfg = FingerprintConfig(count=True, folded=False, scaling="log", unfolded_weights={2: 10.0})
 
-    out = compute_fingerprints(["A"], fp, cfg)
+    out = compute_fingerprints(["C"], fp, cfg)
     keys, vals = out[0]
     assert list(keys) == [2, 5]
     expected = np.log1p(np.array([4.0, 2.0], dtype=np.float32)) * np.array([10.0, 1.0], dtype=np.float32)
