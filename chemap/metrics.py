@@ -180,265 +180,263 @@ def tanimoto_distance_unfolded_binary(bits1: np.ndarray, bits2: np.ndarray) -> f
     return 1.0 - tanimoto_similarity_unfolded_binary(bits1, bits2)
 
 
+# ---- Sparse fixed-size CSR (single pair) ----
+# Signature compatible with PyNNDescent / UMAP "sparse custom metric":
+# metric(ind1, data1, ind2, data2) -> float
+# where ind* are sorted column indices and data* are values.
 
-@numba.njit
-def generalized_tanimoto_similarity(A, B):
+@numba.njit(
+    [
+        "f4(i4[::1], f4[::1], i4[::1], f4[::1])",
+        "f8(i4[::1], f8[::1], i4[::1], f8[::1])",
+        "f4(i8[::1], f4[::1], i8[::1], f4[::1])",
+        "f8(i8[::1], f8[::1], i8[::1], f8[::1])",
+    ],
+    cache=True,
+    fastmath=True,
+)
+def tanimoto_distance_sparse(ind1, data1, ind2, data2) -> float:
     """
-    Calculate the generalized Tanimoto similarity between two count vectors.
-    
-    Parameters:
-    A (array-like): First count vector.
-    B (array-like): Second count vector.
-    
-    Returns:
-    float: Tanimoto similarity.
+    Generalized Tanimoto distance for CSR row slices:
+      dist = 1 - sum(min)/sum(max)
+
+    Works for binary (data are ones) or count/weight (data are nonnegative).
+
+    Parameters
+    ----------
+    ind1
+        1D numpy array of sorted column indices for vector 1.   
+    data1
+        1D numpy array of values for vector 1.
+    ind2
+        1D numpy array of sorted column indices for vector 2.
+    data2
+        1D numpy array of values for vector 2.
     """
-    
-    min_sum = np.sum(np.minimum(A, B))
-    max_sum = np.sum(np.maximum(A, B))
-    
-    return min_sum / max_sum
+    i = 0
+    j = 0
+    n1 = ind1.shape[0]
+    n2 = ind2.shape[0]
+    min_sum = 0.0
+    max_sum = 0.0
 
-
-def generalized_tanimoto_similarity_matrix_sparse_all_vs_all(fingerprints) -> np.ndarray:
-    """
-    Calculate the generalized Tanimoto similarity between all sparse fingerprints.
-    """
-    mapping = occupied_bit_mapping(fingerprints)
-    X = sparse_fingerprint_to_csr(fingerprints, mapping)
-
-    # Precompute L1 norms.
-    norms = np.array(X.sum(axis=1)).ravel()
-
-    # Compute pairwise Manhattan distances.
-    manhattan = pairwise_distances(X, metric='manhattan')
-
-    return compute_generalized_tanimoto_from_manhattan_symmetric(norms, manhattan)
-
-
-def generalized_tanimoto_similarity_matrix_sparse(fingerprints_1, fingerprints_2) -> np.ndarray:
-    """
-    Calculate the generalized Tanimoto similarity between sparse fingerprints_1 and fingerprints_2.
-    """
-    mapping = occupied_bit_mapping(fingerprints_1 + fingerprints_2)
-    X1 = sparse_fingerprint_to_csr(fingerprints_1, mapping)
-    X2 = sparse_fingerprint_to_csr(fingerprints_2, mapping)
-
-    # Precompute L1 norms.
-    norms1 = np.array(X1.sum(axis=1)).ravel()
-    norms2 = np.array(X2.sum(axis=1)).ravel()
-
-    # Compute pairwise Manhattan distances.
-    manhattan = pairwise_distances(X1, X2, metric='manhattan')
-
-    return compute_generalized_tanimoto_from_manhattan(norms1, norms2, manhattan)
-
-
-def occupied_bit_mapping(fingerprints_sparse):
-    # Collect all unique keys.
-    all_keys = set()
-    for keys, _ in fingerprints_sparse:
-        all_keys.update(keys.tolist())
-
-    # Create a mapping from original key to a new, contiguous index.
-    sorted_keys = sorted(all_keys)
-    return {old_key: new_key for new_key, old_key in enumerate(sorted_keys)}
-
-
-def sparse_fingerprint_to_csr(fingerprints_sparse, mapping):
-    # Build lists for constructing the sparse matrix.
-    rows = []
-    cols = []
-    vals = []
-
-    for i, (keys, values) in enumerate(fingerprints_sparse):
-        new_keys = np.array([mapping[k] for k in keys], dtype=np.int32)
-        rows.extend([i] * len(new_keys))
-        cols.extend(new_keys.tolist())
-        vals.extend(values.tolist())
-
-    num_rows = len(fingerprints_sparse)
-    num_cols = len(mapping)  # number of occupied features
-
-    # Build the COO matrix and convert to CSR.
-    X = sp.coo_matrix((vals, (rows, cols)), shape=(num_rows, num_cols), dtype=np.float32)
-    return X.tocsr()
-
-
-@numba.njit(parallel=True, fastmath=True)
-def compute_generalized_tanimoto_from_manhattan_symmetric(norms, manhattan):
-    n = norms.shape[0]
-    tanimoto = np.empty((n, n), dtype=norms.dtype)
-    for i in numba.prange(n):
-        for j in range(n):
-            union = norms[i] + norms[j] + manhattan[i, j]
-            if union > 0:
-                tanimoto[i, j] = (norms[i] + norms[j] - manhattan[i, j]) / union
+    while i < n1 and j < n2:
+        c1 = ind1[i]
+        c2 = ind2[j]
+        if c1 == c2:
+            v1 = data1[i]
+            v2 = data2[j]
+            if v1 < v2:
+                min_sum += v1
+                max_sum += v2
             else:
-                tanimoto[i, j] = 1.0
-    return tanimoto
-
-
-@numba.njit(parallel=True, fastmath=True)
-def compute_generalized_tanimoto_from_manhattan(norms1, norms2, manhattan):
-    n = norms1.shape[0]
-    m = norms2.shape[0]
-    tanimoto = np.empty((n, m), dtype=norms1.dtype)
-    for i in numba.prange(n):
-        for j in range(m):
-            union = norms1[i] + norms2[j] + manhattan[i, j]
-            if union > 0:
-                tanimoto[i, j] = (norms1[i] + norms2[j] - manhattan[i, j]) / union
-            else:
-                tanimoto[i, j] = 1.0
-    return tanimoto
-
-
-@numba.njit
-def generalized_tanimoto_similarity_sparse_numba(keys1, values1, keys2, values2) -> float:
-    """
-    Calculate the generalized Tanimoto similarity between two sparse count vectors.
-
-    Parameters:
-    keys1, values1 (array-like): Keys and values for the first sparse vector.
-    keys2, values2 (array-like): Keys and values for the second sparse vector.
-    """
-    i, j = 0, 0
-    min_sum, max_sum = 0.0, 0.0
-
-    while i < len(keys1) and j < len(keys2):
-        if keys1[i] == keys2[j]:
-            min_sum += min(values1[i], values2[j])
-            max_sum += max(values1[i], values2[j])
+                min_sum += v2
+                max_sum += v1
             i += 1
             j += 1
-        elif keys1[i] < keys2[j]:
-            max_sum += values1[i]
+        elif c1 < c2:
+            max_sum += data1[i]
             i += 1
         else:
-            max_sum += values2[j]
+            max_sum += data2[j]
             j += 1
 
-    # Add remaining values from both vectors
-    while i < len(keys1):
-        max_sum += values1[i]
+    while i < n1:
+        max_sum += data1[i]
         i += 1
-
-    while j < len(keys2):
-        max_sum += values2[j]
+    while j < n2:
+        max_sum += data2[j]
         j += 1
 
-    return min_sum / max_sum
+    if max_sum == 0.0:
+        return 0.0
+    return 1.0 - (min_sum / max_sum)
 
 
-@numba.jit(nopython=True, fastmath=True, parallel=True)
-def generalized_tanimoto_similarity_matrix(references: np.ndarray, queries: np.ndarray) -> np.ndarray:
-    """Returns matrix of generalized Tanimoto similarity between all-vs-all vectors
-    of references and queries.
+@numba.njit(cache=True, fastmath=True)
+def tanimoto_similarity_sparse(ind1, data1, ind2, data2) -> float:
+    return 1.0 - tanimoto_distance_sparse(ind1, data1, ind2, data2)
 
-    Parameters
-    ----------
-    references
-        Reference vectors as 2D numpy array. Expects that vector_i corresponds to
-        references[i, :].
-    queries
-        Query vectors as 2D numpy array. Expects that vector_i corresponds to
-        queries[i, :].
 
-    Returns
-    -------
-    scores
-        Matrix of all-vs-all similarity scores. scores[i, j] will contain the score
-        between the vectors references[i, :] and queries[j, :].
+
+# ---------------------------
+# Pairwise matrices (batch)
+# ---------------------------
+
+# Dense batch: compute all-vs-all without sklearn, numba-parallel
+@numba.njit(parallel=True, fastmath=True, cache=True)
+def tanimoto_similarity_matrix_dense(references: np.ndarray, queries: np.ndarray) -> np.ndarray:
     """
-    assert references.shape[1] == queries.shape[1], "Vector sizes do not match!"
-
-    size1 = references.shape[0]
-    size2 = queries.shape[0]
-    scores = np.zeros((size1, size2)) #, dtype=np.float32)
-    for i in prange(size1):
-        for j in range(size2):
-            scores[i, j] = generalized_tanimoto_similarity(references[i, :], queries[j, :])
-    return scores
-
-
-@numba.jit(nopython=True, fastmath=True, parallel=True)
-def generalized_tanimoto_similarity_matrix_sparse_numba(
-    references: list, queries: list) -> np.ndarray:
-    """Returns matrix of generalized Tanimoto similarity between all-vs-all vectors of references and queries.
-
-    Parameters
-    ----------
-    references:
-        List of sparse fingerprints (tuple of two arrays: keys and counts).
-    queries
-        List of sparse fingerprints (tuple of two arrays: keys and counts).
-
-    Returns
-    -------
-    scores:
-        Matrix of all-vs-all similarity scores. scores[i, j] will contain the score
-        between the vectors references[i, :] and queries[j, :].
+    Pairwise generalized Tanimoto similarity between two dense matrices:
+      references: (R, D)
+      queries:    (Q, D)
+    Returns: (R, Q)
     """
-    size1 = len(references)
-    size2 = len(queries)
-    scores = np.zeros((size1, size2))
-    for i in prange(size1):
-        for j in range(size2):
-            scores[i, j] = generalized_tanimoto_similarity_sparse_numba(
-                references[i][0], references[i][1],
-                queries[j][0], queries[j][1])
-    return scores
+    R = references.shape[0]
+    Q = queries.shape[0]
+    out = np.empty((R, Q), dtype=np.float32)
+    for i in numba.prange(R):
+        for j in range(Q):
+            out[i, j] = tanimoto_similarity_dense(references[i], queries[j])
+    return out
 
 
-@numba.njit
-def generalized_tanimoto_similarity_weighted(A, B, weights):
+# Sparse batch: compute all-vs-all on CSR without densifying.
+# This is O(R*Q*avg_nnz_merge) and can be expensive for large R,Q.
+# For huge datasets prefer ANN (PyNNDescent/UMAP) with `tanimoto_distance_sparse`.
+@numba.njit(parallel=True, fastmath=True, cache=True)
+def tanimoto_similarity_matrix_unfolded_binary(references: Sequence[np.ndarray],
+                                              queries: Sequence[np.ndarray]) -> np.ndarray:
+    R = len(references)
+    Q = len(queries)
+    out = np.empty((R, Q), dtype=np.float32)
+    for i in numba.prange(R):
+        for j in range(Q):
+            out[i, j] = tanimoto_similarity_unfolded_binary(references[i], queries[j])
+    return out
+
+
+@numba.njit(parallel=True, fastmath=True, cache=True)
+def tanimoto_similarity_matrix_unfolded_count(references_bits: Sequence[np.ndarray],
+                                             references_vals: Sequence[np.ndarray],
+                                             queries_bits: Sequence[np.ndarray],
+                                             queries_vals: Sequence[np.ndarray]) -> np.ndarray:
+    R = len(references_bits)
+    Q = len(queries_bits)
+    out = np.empty((R, Q), dtype=np.float32)
+    for i in numba.prange(R):
+        for j in range(Q):
+            out[i, j] = tanimoto_similarity_unfolded_count(
+                references_bits[i], references_vals[i],
+                queries_bits[j], queries_vals[j],
+            )
+    return out
+
+
+# ---------------------------
+# High-level Python convenience wrappers
+# ---------------------------
+
+def _as_1xD_csr(x: Union[np.ndarray, sp.csr_matrix]) -> sp.csr_matrix:
+    if sp.isspmatrix_csr(x):
+        if x.shape[0] == 1:
+            return x
+        if x.shape[0] != 1:
+            raise ValueError("Expected a 1xD CSR row for single fingerprint.")
+        return x
+    x = np.asarray(x)
+    if x.ndim != 1:
+        raise ValueError("Expected a 1D dense vector.")
+    return sp.csr_matrix(x.reshape(1, -1))
+
+
+def tanimoto_similarity(
+    a: Union[DenseVector, sp.csr_matrix, UnfoldedFingerprint],
+    b: Union[DenseVector, sp.csr_matrix, UnfoldedFingerprint],
+    *,
+    kind: Optional[Literal["dense", "sparse", "unfolded-binary", "unfolded-count"]] = None,
+) -> float:
     """
-    Calculate the weighted generarlized Tanimoto similarity between two count vectors.
-    
-    Parameters:
-    ----------
-        A (array-like): First count vector.
-        B (array-like): Second count vector.
-        weights: weights for every vector bit
-    
-    Returns:
-    float: Tanimoto similarity.
+    Unified single-pair API.
+
+    - kind="dense": expects 1D arrays same length
+    - kind="sparse": expects 1xD csr_matrix for each
+    - kind="unfolded-binary": expects 1D bit arrays (sorted unique)
+    - kind="unfolded-count": expects (bits, counts) for each
     """
-    
-    min_sum = np.sum(np.minimum(A, B) * weights)
-    max_sum = np.sum(np.maximum(A, B) * weights)
-    
-    return min_sum / max_sum
+    if kind is None:
+        # best-effort inference
+        if sp.isspmatrix(a) or sp.isspmatrix(b):
+            kind = "sparse"
+        elif isinstance(a, tuple) or isinstance(b, tuple):
+            kind = "unfolded-count"
+        else:
+            # could be dense or unfolded-binary; assume dense if numeric vector length is "large"
+            # For safety in a library, caller should pass kind when ambiguous.
+            kind = "dense"
+
+    if kind == "dense":
+        aa = np.asarray(a)  # type: ignore[arg-type]
+        bb = np.asarray(b)  # type: ignore[arg-type]
+        if aa.ndim != 1 or bb.ndim != 1 or aa.shape[0] != bb.shape[0]:
+            raise ValueError("Dense vectors must be 1D and same length.")
+        return float(tanimoto_similarity_dense(aa.astype(np.float32, copy=False),
+                                              bb.astype(np.float32, copy=False)))
+
+    if kind == "sparse":
+        A = _as_1xD_csr(a)  # type: ignore[arg-type]
+        B = _as_1xD_csr(b)  # type: ignore[arg-type]
+        A.sort_indices()
+        B.sort_indices()
+        ind1 = A.indices[A.indptr[0]:A.indptr[1]]
+        dat1 = A.data[A.indptr[0]:A.indptr[1]]
+        ind2 = B.indices[B.indptr[0]:B.indptr[1]]
+        dat2 = B.data[B.indptr[0]:B.indptr[1]]
+        return float(tanimoto_similarity_sparse(ind1, dat1, ind2, dat2))
+
+    if kind == "unfolded-binary":
+        bits1 = np.asarray(a, dtype=np.int64)  # type: ignore[arg-type]
+        bits2 = np.asarray(b, dtype=np.int64)  # type: ignore[arg-type]
+        return float(tanimoto_similarity_unfolded_binary(bits1, bits2))
+
+    if kind == "unfolded-count":
+        bits1, vals1 = a  # type: ignore[misc]
+        bits2, vals2 = b  # type: ignore[misc]
+        return float(tanimoto_similarity_unfolded_count(
+            np.asarray(bits1, dtype=np.int64),
+            np.asarray(vals1, dtype=np.float32),
+            np.asarray(bits2, dtype=np.int64),
+            np.asarray(vals2, dtype=np.float32),
+        ))
+
+    raise ValueError(f"Unknown kind={kind!r}")
 
 
-@numba.jit(nopython=True, fastmath=True, parallel=True)
-def generalized_tanimoto_similarity_matrix_weighted(
-        references: np.ndarray,
-        queries: np.ndarray,
-        weights: np.ndarray
-        ) -> np.ndarray:
-    """Returns matrix of generalized Tanimoto similarity between all-vs-all vectors of references and queries.
-
-    Parameters
-    ----------
-    references
-        Reference vectors as 2D numpy array. Expects that vector_i corresponds to
-        references[i, :].
-    queries
-        Query vectors as 2D numpy array. Expects that vector_i corresponds to
-        queries[i, :].
-
-    Returns
-    -------
-    scores
-        Matrix of all-vs-all similarity scores. scores[i, j] will contain the score
-        between the vectors references[i, :] and queries[j, :].
+def tanimoto_similarity_matrix(
+    references: Union[DenseMatrix, sp.csr_matrix],
+    queries: Union[DenseMatrix, sp.csr_matrix],
+    *,
+    kind: Literal["dense", "sparse"] = "dense",
+) -> np.ndarray:
     """
-    size1 = references.shape[0]
-    size2 = queries.shape[0]
-    scores = np.zeros((size1, size2)) #, dtype=np.float32)
-    for i in prange(size1):
-        for j in range(size2):
-            scores[i, j] = generalized_tanimoto_similarity_weighted(references[i, :], queries[j, :], weights)
-    return scores
+    Unified all-vs-all API for fixed-size representations.
+
+    - kind="dense": references (R,D), queries (Q,D) -> (R,Q)
+    - kind="sparse": references CSR (R,D), queries CSR (Q,D) -> (R,Q) via per-row merges
+
+    Note: sparse all-vs-all is expensive for large R,Q; use ANN for kNN graphs instead.
+    """
+    if kind == "dense":
+        R = np.asarray(references, dtype=np.float32)
+        Q = np.asarray(queries, dtype=np.float32)
+        if R.ndim != 2 or Q.ndim != 2 or R.shape[1] != Q.shape[1]:
+            raise ValueError("Dense matrices must be 2D and share the same number of columns.")
+        return tanimoto_similarity_matrix_dense(R, Q)
+
+    if kind == "sparse":
+        if not (sp.isspmatrix_csr(references) and sp.isspmatrix_csr(queries)):
+            raise TypeError("For kind='sparse', references and queries must be CSR matrices.")
+        A = references.copy()
+        B = queries.copy()
+        A.sort_indices()
+        B.sort_indices()
+
+        R = A.shape[0]
+        Q = B.shape[0]
+        out = np.empty((R, Q), dtype=np.float32)
+
+        # Row-wise merge calling the numba sparse primitive
+        for i in range(R):
+            a0 = A.indptr[i]
+            a1 = A.indptr[i + 1]
+            ind1 = A.indices[a0:a1]
+            dat1 = A.data[a0:a1]
+            for j in range(Q):
+                b0 = B.indptr[j]
+                b1 = B.indptr[j + 1]
+                ind2 = B.indices[b0:b1]
+                dat2 = B.data[b0:b1]
+                out[i, j] = tanimoto_similarity_sparse(ind1, dat1, ind2, dat2)
+        return out
+
+    raise ValueError(f"Unknown kind={kind!r}")
