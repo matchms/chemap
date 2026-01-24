@@ -109,7 +109,7 @@ def compute_fingerprints(
     config: FingerprintConfig = FingerprintConfig(),
     *,
     show_progress: bool = False,
-    n_jobs: int = 8,
+    n_jobs: int = -1,
 ) -> FingerprintResult:
     """
     Compute fingerprints for a sequence of SMILES.
