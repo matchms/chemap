@@ -1,5 +1,5 @@
 from dataclasses import replace
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 import pytest
 import scipy.sparse as sp
@@ -28,7 +28,6 @@ SMILES: List[str] = [
 # ----------------------------
 
 def _rdkit_generators() -> List[Tuple[str, Any]]:
-    # rdFingerprintGenerator-style objects
     return [
         ("rdkit_morgan_2048_r2", rdFingerprintGenerator.GetMorganGenerator(radius=2, fpSize=2048)),
         ("rdkit_rdkitfp_2048", rdFingerprintGenerator.GetRDKitFPGenerator(fpSize=2048)),
@@ -51,43 +50,29 @@ def _skfp_generators() -> Dict[str, Any]:
 
 
 def _supports_count_param(params: Dict[str, Any]) -> Optional[str]:
-    """
-    Heuristic: discover a "count" flag parameter if present.
-    (scikit-fingerprints uses different spellings across versions / classes)
-    """
-    for key in ("count", "counts", "use_counts", "useCounts", "use_count", "useCountsSimulation"):
+    for key in ("count", "counts", "use_counts", "useCounts", "use_count"):
         if key in params:
             return key
     return None
 
 
 def _build_skfp_transformers() -> List[Tuple[str, Any, bool]]:
-    """
-    Returns [(name, transformer_instance_binary, supports_count_variant)].
-    """
     mod = _skfp_generators()
-    if mod is None:
-        return []
-
     out: List[Tuple[str, Any, bool]] = []
+
     for cls_name, cls in mod.items():
         try:
             base = cls()  # type: ignore[call-arg]
             params = base.get_params(deep=False)
-            count_key = _supports_count_param(params)
-            supports_count = count_key is not None
+            supports_count = _supports_count_param(params) is not None
             out.append((f"skfp_{cls_name}", base, supports_count))
         except Exception:
-            # If a particular transformer can't be constructed with defaults, skip it.
             continue
 
     return out
 
 
 def _skfp_make_variant(fp: Any, *, count: bool) -> Any:
-    """
-    Clone transformer with `count` enabled if it supports it; otherwise return original.
-    """
     params = fp.get_params(deep=False)
     count_key = _supports_count_param(params)
     if count_key is None:
@@ -95,6 +80,14 @@ def _skfp_make_variant(fp: Any, *, count: bool) -> Any:
     params = dict(params)
     params[count_key] = bool(count)
     return fp.__class__(**params)
+
+
+def _supports_unfolded_variant(fp: Any) -> bool:
+    try:
+        params = fp.get_params(deep=False)
+    except Exception:
+        return False
+    return "variant" in params
 
 
 # ----------------------------
@@ -110,15 +103,12 @@ def _assert_dense_matrix(X: np.ndarray, n_rows: int) -> None:
 
 
 def _assert_binary_dense(X: np.ndarray) -> None:
-    # allow all-zeros rows for tiny molecules, but values must be 0/1
     u = np.unique(X)
     assert set(u.tolist()).issubset({0.0, 1.0})
 
 
 def _assert_count_dense(X: np.ndarray) -> None:
     assert (X >= 0).all()
-    # at least something non-zero overall
-    assert float(X.sum()) >= 0.0
 
 
 def _assert_csr_matrix(X: sp.csr_matrix, n_rows: int) -> None:
@@ -138,157 +128,184 @@ def _assert_count_csr(X: sp.csr_matrix) -> None:
     assert (X.data >= 0).all()
 
 
-def _supports_unfolded_variant(fp: Any) -> bool:
-    # Your code requires a `variant` param to do folded=False for sklearn/scikit-fingerprints
-    try:
-        params = fp.get_params(deep=False)
-    except Exception:
-        return False
-    return "variant" in params
-
 # ============================================================
-# CASE 1
-# - dense fingerprint (binary and where feasible count)
+# Parametrized case builders
 # ============================================================
 
-def test_dense_fingerprints_binary_and_count_many_generators() -> None:
-    gens_rdkit = _rdkit_generators()
-    gens_skfp = _build_skfp_transformers()
+def _case1_dense_cases():
+    """
+    CASE 1:
+    - dense fingerprint (binary and where feasible count)
+    Each run = separate pytest param case.
+    """
+    cases: List[pytest.ParamSpecArg] = []
 
-    if not gens_rdkit and not gens_skfp:
-        pytest.skip("No fingerprint generators available (RDKit/scikit-fingerprints not importable).")
+    # RDKit: binary + count
+    for name, gen in _rdkit_generators():
+        cfg_bin = FingerprintConfig(count=False, folded=True, return_csr=False, invalid_policy="keep")
+        cases.append(pytest.param(name, gen, cfg_bin, "dense-binary", id=f"{name}__dense__binary"))
 
-    # RDKit: always supports both binary + count
-    for name, gen in gens_rdkit:
-        # binary
-        cfg = FingerprintConfig(count=False, folded=True, return_csr=False, invalid_policy="keep")
-        X = compute_fingerprints(SMILES, gen, cfg, show_progress=False, n_jobs=1)
-        _assert_dense_matrix(X, n_rows=len(SMILES))
+        cfg_cnt = replace(cfg_bin, count=True)
+        cases.append(pytest.param(name, gen, cfg_cnt, "dense-count", id=f"{name}__dense__count"))
+
+    # skfp: binary always; count only if supported
+    for name, fp, supports_count in _build_skfp_transformers():
+        cfg_bin = FingerprintConfig(count=False, folded=True, return_csr=False, invalid_policy="keep")
+        cases.append(pytest.param(name, fp, cfg_bin, "dense-binary", id=f"{name}__dense__binary"))
+
+        if supports_count:
+            fp_count = _skfp_make_variant(fp, count=True)
+            cfg_cnt = replace(cfg_bin, count=True)
+            cases.append(pytest.param(name, fp_count, cfg_cnt, "dense-count", id=f"{name}__dense__count"))
+
+    return cases
+
+
+def _case2_csr_cases():
+    """
+    CASE 2:
+    - return_csr=True (binary and where feasible count)
+    Each run = separate pytest param case.
+    """
+    cases: List[pytest.ParamSpecArg] = []
+
+    # RDKit: binary + count
+    for name, gen in _rdkit_generators():
+        cfg_bin = FingerprintConfig(count=False, folded=True, return_csr=True, invalid_policy="keep")
+        cases.append(pytest.param(name, gen, cfg_bin, "csr-binary", id=f"{name}__csr__binary"))
+
+        cfg_cnt = replace(cfg_bin, count=True)
+        cases.append(pytest.param(name, gen, cfg_cnt, "csr-count", id=f"{name}__csr__count"))
+
+    # skfp: binary always; count only if supported
+    for name, fp, supports_count in _build_skfp_transformers():
+        cfg_bin = FingerprintConfig(count=False, folded=True, return_csr=True, invalid_policy="keep")
+        cases.append(pytest.param(name, fp, cfg_bin, "csr-binary", id=f"{name}__csr__binary"))
+
+        if supports_count:
+            fp_count = _skfp_make_variant(fp, count=True)
+            cfg_cnt = replace(cfg_bin, count=True)
+            cases.append(pytest.param(name, fp_count, cfg_cnt, "csr-count", id=f"{name}__csr__count"))
+
+    return cases
+
+
+def _case3_fit_backend_cases():
+    """
+    CASE 3 (skfp only):
+    - "return_csr=True with folded=True and folded=False"
+      We split into separate runs:
+        A) folded=True, return_csr=True works
+        B) folded=False, return_csr=True raises ValueError
+        C) folded=False, return_csr=False:
+           - if supports variant: works (unfolded)
+           - else: raises NotImplementedError
+    """
+    cases: List[pytest.ParamSpecArg] = []
+
+    for name, fp, supports_count in _build_skfp_transformers():
+        # A)
+        cfg_ok = FingerprintConfig(count=False, folded=True, return_csr=True, invalid_policy="keep")
+        cases.append(pytest.param(name, fp, cfg_ok, "folded_true_csr_ok", supports_count,
+                                  id=f"{name}__case3__folded_true__csr_ok"))
+
+        # B)
+        cfg_bad = replace(cfg_ok, folded=False, return_csr=True)
+        cases.append(pytest.param(name, fp, cfg_bad, "folded_false_csr_raises_valueerror", supports_count,
+                                  id=f"{name}__case3__folded_false__csr_raises_valueerror"))
+
+        # C)
+        cfg_unfolded = FingerprintConfig(count=False, folded=False, return_csr=False, invalid_policy="keep")
+        behavior = "unfolded_ok" if _supports_unfolded_variant(fp) else "unfolded_raises_notimplemented"
+        cases.append(pytest.param(name, fp, cfg_unfolded, behavior, supports_count,
+                                  id=f"{name}__case3__folded_false__unfolded_{behavior}"))
+
+        # (Optional) If you also want unfolded-count as separate cases where feasible + variant exists:
+        if supports_count and _supports_unfolded_variant(fp):
+            fp_count = _skfp_make_variant(fp, count=True)
+            cfg_unfolded_count = replace(cfg_unfolded, count=True)
+            cases.append(pytest.param(name, fp_count, cfg_unfolded_count, "unfolded_count_ok", True,
+                                      id=f"{name}__case3__folded_false__unfolded_count_ok"))
+
+    return cases
+
+
+# ============================================================
+# CASE 1: dense (parametrized per run)
+# ============================================================
+
+@pytest.mark.parametrize("name, fpgen, cfg, mode", _case1_dense_cases())
+def test_case1_dense_per_run(name: str, fpgen: Any, cfg: FingerprintConfig, mode: str) -> None:
+    X = compute_fingerprints(SMILES, fpgen, cfg, show_progress=False, n_jobs=1)
+
+    _assert_dense_matrix(X, n_rows=len(SMILES))
+    if mode.endswith("binary"):
         _assert_binary_dense(X)
-
-        # count
-        cfg = replace(cfg, count=True)
-        X = compute_fingerprints(SMILES, gen, cfg, show_progress=False, n_jobs=1)
-        _assert_dense_matrix(X, n_rows=len(SMILES))
+    else:
         _assert_count_dense(X)
 
-    # scikit-fingerprints: binary always; count only if transformer supports it
-    for name, fp, supports_count in gens_skfp:
-        # binary
-        cfg = FingerprintConfig(count=False, folded=True, return_csr=False, invalid_policy="keep")
-        X = compute_fingerprints(SMILES, fp, cfg, show_progress=False, n_jobs=1)
-        _assert_dense_matrix(X, n_rows=len(SMILES))
-        _assert_binary_dense(X)
-
-        # count (where feasible)
-        if supports_count:
-            fp_count = _skfp_make_variant(fp, count=True)
-            cfg = replace(cfg, count=True)
-            X = compute_fingerprints(SMILES, fp_count, cfg, show_progress=False, n_jobs=1)
-            _assert_dense_matrix(X, n_rows=len(SMILES))
-            _assert_count_dense(X)
-
 
 # ============================================================
-# CASE 2
-# - if fitting the fingerprint: return_csr=True (binary and where feasible count)
-#   (We still include RDKit here because return_csr=True is supported as well.)
+# CASE 2: csr (parametrized per run)
 # ============================================================
 
-def test_return_csr_folded_binary_and_count_many_generators() -> None:
-    gens_rdkit = _rdkit_generators()
-    gens_skfp = _build_skfp_transformers()
+@pytest.mark.parametrize("name, fpgen, cfg, mode", _case2_csr_cases())
+def test_case2_csr_per_run(name: str, fpgen: Any, cfg: FingerprintConfig, mode: str) -> None:
+    X = compute_fingerprints(SMILES, fpgen, cfg, show_progress=False, n_jobs=1)
 
-    if not gens_rdkit and not gens_skfp:
-        pytest.skip("No fingerprint generators available (RDKit/scikit-fingerprints not importable).")
-
-    # RDKit
-    for name, gen in gens_rdkit:
-        # binary -> CSR
-        cfg = FingerprintConfig(count=False, folded=True, return_csr=True, invalid_policy="keep")
-        X = compute_fingerprints(SMILES, gen, cfg, show_progress=False, n_jobs=1)
-        _assert_csr_matrix(X, n_rows=len(SMILES))
+    _assert_csr_matrix(X, n_rows=len(SMILES))
+    if mode.endswith("binary"):
         _assert_binary_csr(X)
-
-        # count -> CSR
-        cfg = replace(cfg, count=True)
-        X = compute_fingerprints(SMILES, gen, cfg, show_progress=False, n_jobs=1)
-        _assert_csr_matrix(X, n_rows=len(SMILES))
+    else:
         _assert_count_csr(X)
 
-    # scikit-fingerprints (fit/transform backend)
-    for name, fp, supports_count in gens_skfp:
-        # binary -> CSR
-        cfg = FingerprintConfig(count=False, folded=True, return_csr=True, invalid_policy="keep")
-        X = compute_fingerprints(SMILES, fp, cfg, show_progress=False, n_jobs=1)
-        _assert_csr_matrix(X, n_rows=len(SMILES))
-        _assert_binary_csr(X)
-
-        # count -> CSR (where feasible)
-        if supports_count:
-            fp_count = _skfp_make_variant(fp, count=True)
-            cfg = replace(cfg, count=True)
-            X = compute_fingerprints(SMILES, fp_count, cfg, show_progress=False, n_jobs=1)
-            _assert_csr_matrix(X, n_rows=len(SMILES))
-            _assert_count_csr(X)
-
 
 # ============================================================
-# CASE 3
-# - if fitting the fingerprint:
-#     return_csr=True with folded=True and folded=False
-#
-# (folded=False, return_csr=True) is INVALID by design
-# and must raise (validated in _validate_config). We test both behaviors.
-# We also compute unfolded output (folded=False) with return_csr=False to
-# still "run them all on a few simple smiles".
+# CASE 3: fitting backend + folded True/False (parametrized)
 # ============================================================
 
-def test_fit_backend_return_csr_true_folded_true_and_false() -> None:
-    gens_skfp = _build_skfp_transformers()
-    if not gens_skfp:
-        pytest.skip("scikit-fingerprints/sklearn-style transformers not importable in this env.")
-
-    for name, fp, supports_count in gens_skfp:
-        # 1) folded=True + return_csr=True should work
-        cfg_ok = FingerprintConfig(count=False, folded=True, return_csr=True, invalid_policy="keep")
-        X = compute_fingerprints(SMILES, fp, cfg_ok, show_progress=False, n_jobs=1)
+@pytest.mark.parametrize("name, fpgen, cfg, behavior, supports_count", _case3_fit_backend_cases())
+def test_case3_fit_backend_per_run(
+    name: str,
+    fpgen: Any,
+    cfg: FingerprintConfig,
+    behavior: str,
+    supports_count: bool,
+) -> None:
+    if behavior == "folded_true_csr_ok":
+        X = compute_fingerprints(SMILES, fpgen, cfg, show_progress=False, n_jobs=1)
         _assert_csr_matrix(X, n_rows=len(SMILES))
+        return
 
-        # 2) folded=False + return_csr=True must raise (per _validate_config)
-        cfg_bad = replace(cfg_ok, folded=False, return_csr=True)
+    if behavior == "folded_false_csr_raises_valueerror":
         with pytest.raises(ValueError, match="return_csr is only valid when folded=True"):
-            compute_fingerprints(SMILES, fp, cfg_bad, show_progress=False, n_jobs=1)
+            compute_fingerprints(SMILES, fpgen, cfg, show_progress=False, n_jobs=1)
+        return
 
-        # 3) folded=False + return_csr=False:
-        #    - run if transformer supports `variant`
-        #    - otherwise, assert the documented NotImplementedError
-        cfg_unfolded = FingerprintConfig(count=False, folded=False, return_csr=False, invalid_policy="keep")
+    if behavior in ("unfolded_ok", "unfolded_count_ok"):
+        out = compute_fingerprints(SMILES, fpgen, cfg, show_progress=False, n_jobs=1)
+        assert isinstance(out, list)
+        assert len(out) == len(SMILES)
 
-        if _supports_unfolded_variant(fp):
-            out = compute_fingerprints(SMILES, fp, cfg_unfolded, show_progress=False, n_jobs=1)
-            assert isinstance(out, list)
-            assert len(out) == len(SMILES)
+        if cfg.count:
+            for keys, vals in out:
+                assert isinstance(keys, np.ndarray) and keys.dtype == np.int64
+                assert isinstance(vals, np.ndarray) and vals.dtype == np.float32
+                assert keys.shape == vals.shape
+                assert (keys >= 0).all()
+                assert (vals >= 0).all()
+                assert np.all(keys[:-1] <= keys[1:]) if keys.size > 1 else True
+        else:
             for keys in out:
                 assert isinstance(keys, np.ndarray)
                 assert keys.dtype == np.int64
                 assert (keys >= 0).all()
                 assert np.all(keys[:-1] <= keys[1:]) if keys.size > 1 else True
+        return
 
-            # count unfolded (where feasible AND where variant exists)
-            if supports_count:
-                fp_count = _skfp_make_variant(fp, count=True)
-                cfg_unfolded_count = replace(cfg_unfolded, count=True)
-                out = compute_fingerprints(SMILES, fp_count, cfg_unfolded_count, show_progress=False, n_jobs=1)
-                assert isinstance(out, list)
-                assert len(out) == len(SMILES)
-                for keys, vals in out:
-                    assert isinstance(keys, np.ndarray) and keys.dtype == np.int64
-                    assert isinstance(vals, np.ndarray) and vals.dtype == np.float32
-                    assert keys.shape == vals.shape
-                    assert (keys >= 0).all()
-                    assert (vals >= 0).all()
-                    assert np.all(keys[:-1] <= keys[1:]) if keys.size > 1 else True
-        else:
-            with pytest.raises(NotImplementedError, match="Requested folded=False"):
-                compute_fingerprints(SMILES, fp, cfg_unfolded, show_progress=False, n_jobs=1)
+    if behavior == "unfolded_raises_notimplemented":
+        with pytest.raises(NotImplementedError, match="Requested folded=False"):
+            compute_fingerprints(SMILES, fpgen, cfg, show_progress=False, n_jobs=1)
+        return
+
+    raise AssertionError(f"Unknown behavior: {behavior!r}")
