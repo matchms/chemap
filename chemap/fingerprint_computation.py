@@ -95,7 +95,7 @@ class RobustMolTransformer(BaseEstimator, TransformerMixin):
 
     def transform(self, X):
         results = Parallel(n_jobs=self.n_jobs)(
-            delayed(_mol_from_smiles_robust)(s) for s in X
+            delayed(mol_from_smiles)(s) for s in X
         )
         return results
 
@@ -241,7 +241,7 @@ def _looks_like_rdkit_fpgen(fpgen: Any) -> bool:
     return hasattr(fpgen, "GetFingerprintAsNumPy") and hasattr(fpgen, "GetSparseCountFingerprint")
 
 
-def _mol_from_smiles_robust(smiles: str) -> Optional["Chem.Mol"]:
+def mol_from_smiles(smiles: str) -> Optional["Chem.Mol"]:
     """
     Parse SMILES into an RDKit Mol.
     """
@@ -279,11 +279,11 @@ def _compute_mols_parallel(smiles: Sequence[str], n_jobs: int, show_progress: bo
     """
     if n_jobs == 1:
         return [
-            _mol_from_smiles_robust(s) for s in tqdm(smiles, disable=not show_progress, desc="Generating molecules")
+            mol_from_smiles(s) for s in tqdm(smiles, disable=not show_progress, desc="Generating molecules")
         ]
 
     results = Parallel(n_jobs=n_jobs, batch_size="auto")(
-        delayed(_mol_from_smiles_robust)(s)
+        delayed(mol_from_smiles)(s)
         for s in tqdm(
             smiles,
             total=len(smiles),
