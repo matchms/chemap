@@ -580,9 +580,38 @@ def _compute_sklearn(
     fp = _skfp_configure_output(fpgen, cfg, show_progress=show_progress, n_jobs=n_jobs)
     mol_transformer = RobustMolTransformer(n_jobs=n_jobs)
     mols = mol_transformer.transform(smiles)
-    valid_mols = [m for m in mols if m is not None]
+
+    # Determine valid/invalid molecules and handle invalid according to policy.
+    valid_idx = [i for i, m in enumerate(mols) if m is not None]
+    invalid_idx = [i for i, m in enumerate(mols) if m is None]
+
+    if invalid_idx and cfg.invalid_policy == "raise":
+        raise ValueError(f"Invalid SMILES: {smiles[invalid_idx[0]]}")
+
+    # Fit/transform only valid mols (safe for most transformers)
+    valid_mols = [mols[i] for i in valid_idx]
+
     fp.fit(valid_mols)
-    X = fp.transform(valid_mols)
+    X_valid = fp.transform(valid_mols)
+
+    # If policy is drop: just return X_valid (current behavior)
+    if cfg.invalid_policy == "drop":
+        X = X_valid
+    else:
+        # policy keep: reinsert empty rows to match input length
+        N = len(smiles)
+
+        if sp.issparse(X_valid):
+            X_valid = X_valid.tocsr().astype(np.float32)
+            D = X_valid.shape[1]
+            X = sp.csr_matrix((N, D), dtype=np.float32)
+            # place valid rows
+            X[valid_idx, :] = X_valid
+        else:
+            X_valid = np.asarray(X_valid, dtype=np.float32)
+            D = X_valid.shape[1]
+            X = np.zeros((N, D), dtype=np.float32)
+            X[valid_idx, :] = X_valid
 
     if not cfg.folded:
         # unfolded output
