@@ -11,7 +11,25 @@ Library for computing molecular fingerprint based similarities as well as dimens
 
 
 ## Fingerprint computations
-Fingerprints can be computed using generators from `RDKit` or `scikit-fingerprints`. Here a code example:
+Fingerprints can be computed using generators from `RDKit` or `scikit-fingerprints`. 
+This includes popular fingerprint types such as:
+
+### Path-based and circular fingerprints
+- RDKit fingerprints
+- Morgan fingerprints
+
+### Predefined substructure fingerprints
+- MACCS fingerprints
+- PubChem fingerprints
+- Klekota-Roth fingerprints
+
+### Topological distance based fingerprints
+- Atom pair fingerprints
+- MAP4 fingerprints
+
+
+
+Here a code example:
 
 ```python
 import numpy as np
