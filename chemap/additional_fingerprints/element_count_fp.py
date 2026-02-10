@@ -2,7 +2,6 @@ from typing import Any, Dict, List, Optional, Sequence
 import numpy as np
 import scipy.sparse as sp
 from joblib import Parallel, delayed
-from rdkit import Chem
 from sklearn.base import BaseEstimator, TransformerMixin
 
 
