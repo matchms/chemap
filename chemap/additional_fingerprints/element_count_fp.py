@@ -7,7 +7,7 @@ from sklearn.base import BaseEstimator, TransformerMixin
 
 class ElementCountFingerprint(BaseEstimator, TransformerMixin):
     """
-    sklearn-fingerprints-style element-count "fingerprint". This is not what can be consider a real fingerprint,
+    sklearn/scikit-fingerprints-style element-count "fingerprint". This is not a real molecular fingerprint,
     but it can be useful as a simple baseline or for certain applications (for instance in concatenation with
     other representations).
 
