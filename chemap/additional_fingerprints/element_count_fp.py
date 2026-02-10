@@ -89,17 +89,11 @@ class ElementCountFingerprint(BaseEstimator, TransformerMixin):
             out = np.zeros((D,), dtype=np.float32)
             other_idx = self._elem2idx_.get("Other", None)
 
-            # Count explicit atoms
+            # Count non-H atoms only (H is handled separately below)
             for atom in mol.GetAtoms():
                 sym = atom.GetSymbol()
-
-                # Handle explicit H counting mode
                 if sym == "H":
-                    if self.include_hs == {"none", "implicit", "explicit"}:
-                        continue
-                    if self.include_hs == "implicit":
-                        # In implicit mode, Hs are counted via GetTotalNumHs
-                        continue      
+                    continue  # avoid double-counting in explicit/implicit modes
 
                 idx = self._elem2idx_.get(sym, None)
                 if idx is not None:
@@ -112,19 +106,18 @@ class ElementCountFingerprint(BaseEstimator, TransformerMixin):
                     else:
                         raise ValueError(f"Unknown element '{sym}' not in elements vocabulary.")
 
-            # Count implicit Hs (most common + stable baseline)
+            # Count H depending on mode
             if self.include_hs == "implicit":
                 h_idx = self._elem2idx_.get("H", None)
                 if h_idx is not None:
                     h_count = 0
                     for atom in mol.GetAtoms():
-                        # total Hs on this heavy atom (implicit + explicit attached),
-                        # but in normal RDKit mols explicit H atoms are absent.
+                        # Note: for explicit-H molecules (after AddHs), GetTotalNumHs() on heavy atoms is typically 0,
+                        # but we don't rely on that in explicit mode anyway.
                         h_count += int(atom.GetTotalNumHs())
                     out[h_idx] += float(h_count)
 
-            # Count explicit H atoms if requested
-            if self.include_hs == "explicit":
+            elif self.include_hs == "explicit":
                 h_idx = self._elem2idx_.get("H", None)
                 if h_idx is not None:
                     h_count = sum(1 for a in mol.GetAtoms() if a.GetSymbol() == "H")
