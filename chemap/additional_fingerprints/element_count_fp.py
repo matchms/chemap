@@ -7,7 +7,9 @@ from sklearn.base import BaseEstimator, TransformerMixin
 
 class ElementCountFingerprint(BaseEstimator, TransformerMixin):
     """
-    sklearn-style element-count baseline fingerprint.
+    sklearn-fingerprints-style element-count "fingerprint". This is not what can be consider a real fingerprint,
+    but it can be useful as a simple baseline or for certain applications (for instance in concatenation with
+    other representations).
 
     Input:  Sequence[rdkit.Chem.Mol]
     Output: (N, D) float32 dense or CSR float32 (if sparse=True)
@@ -32,15 +34,31 @@ class ElementCountFingerprint(BaseEstimator, TransformerMixin):
         include_hs: str = "implicit",     # "implicit" | "explicit" | "none"
         unknown_policy: str = "other",    # "ignore" | "other" | "error"
         sparse: bool = False,
-        variant: str = "folded",          # kept for chemap compatibility
         n_jobs: int = 1,
         verbose: int = 0,
     ):
+        """Initialize the ElementCountFingerprint transformer.
+        
+        Parameters
+        ----------
+        elements : Optional[Sequence[str]], optional
+            List of element symbols to include as features. If None, the vocabulary will be inferred from the data.
+        include_hs : str, optional
+            How to handle hydrogen atoms. Options are "implicit", "explicit", or "none".
+        unknown_policy : str, optional
+            Policy for handling elements not in the `elements` list. Options are "ignore", "other", or "error".
+        sparse : bool, optional
+            Whether to return the output as a sparse matrix (CSR) or a dense NumPy array.
+        n_jobs : int, optional
+            Number of parallel jobs to run for the transformation. Default is 1 (no parallelism).
+        verbose : int, optional
+            Verbosity level for parallel processing. Default is 0 (no verbosity).
+        """
         self.elements = list(elements) if elements is not None else None
         self.include_hs = include_hs
         self.unknown_policy = unknown_policy
         self.sparse = sparse
-        self.variant = variant
+        self.variant = "folded"  # unfolded does not really make sense for element counts, only for API consistency.
         self.n_jobs = n_jobs
         self.verbose = verbose
 
@@ -75,6 +93,14 @@ class ElementCountFingerprint(BaseEstimator, TransformerMixin):
         return self
 
     def transform(self, X: Sequence[Any]):
+        """
+        Transform a sequence of RDKit Mol objects into element count fingerprints.
+        
+        Parameters
+        ----------
+        X : Sequence[Any]
+            A sequence of RDKit Mol objects to transform.
+        """
         if not hasattr(self, "_elem2idx_"):
             # sklearn convention: allow transform without explicit fit
             self.fit(X)
