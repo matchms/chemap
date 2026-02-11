@@ -9,6 +9,15 @@
 # chemap - Mapping chemical space
 Library for computing molecular fingerprint based similarities as well as dimensionality reduction based chemical space visualizations.
 
+## Installation
+`chemap` can be installed using pip.
+```bash
+pip install chemap
+```
+Or, to include UMAP computation abilities on either CPU or GPU chose one of the following option:
+- CPU version: ```pip install "chemap[cpu]"```
+- GPU version (CUDA 12): ```pip install "chemap[gpu-cu12]"```
+- GPU version (CUDA 13): ```pip install "chemap[gpu-cu13]"```
 
 ## Fingerprint computations
 Fingerprints can be computed using generators from `RDKit` or `scikit-fingerprints`. 
