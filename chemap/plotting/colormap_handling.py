@@ -69,9 +69,9 @@ def build_hier_label_map(
     -------
     class_to_label:
         Dict mapping original Class (string) -> display label.
-        Notes:
-        - Missing/unknown class/superclass entries are NOT included here (because there is no class key).
-        - This is intended for mapping non-null class values, e.g. `df[class_col].map(class_to_label).fillna(rare_label)`.
+    Notes:
+    - Missing/unknown class/superclass entries are NOT included here (because there is no class key).
+    - This is intended for mapping non-null class values, e.g. `df[class_col].map(class_to_label).fillna(rare_label)`.
     superclass_info:
         Dict with per-superclass debug info: count, branch, n_classes.
 
