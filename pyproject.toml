@@ -46,18 +46,6 @@ cpu = [
   "pynndescent>=0.5.13",
 ]
 
-[tool.poetry.group.gpu-cu12]
-optional = true
-[tool.poetry.group.gpu-cu12.dependencies]
-cuml-cu12 = { version = ">=26.2.0", markers = "platform_system == 'Linux'" }
-cupy-cuda12x = { version = ">=13.0.0", markers = "platform_system == 'Linux'" }
-
-[tool.poetry.group.gpu-cu13]
-optional = true
-[tool.poetry.group.gpu-cu13.dependencies]
-cuml-cu13 = { version = ">=26.2.0", markers = "platform_system == 'Linux'" }
-cupy-cuda13x = { version = ">=13.0.0", markers = "platform_system == 'Linux'" }
-
 [dependency-groups]
 dev = [
     "decorator>=5.1.1",
