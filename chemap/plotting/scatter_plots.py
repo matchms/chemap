@@ -96,6 +96,9 @@ def scatter_plot_base(
     style: ScatterStyle = ScatterStyle(),
     ax: Optional[Axes] = None,
 ) -> Tuple[Figure, Axes]:
+    """A base scatter plot function that takes pre-mapped labels and a palette.
+    This is not intended for direct use, but as a building block for the more user-friendly wrapper functions below.
+    """
     _validate_required_columns(data_plot, [x_col, y_col, label_col])
 
     labels = data_plot[label_col].dropna().map(str)
@@ -187,6 +190,39 @@ def scatter_plot_all_classes(
 ) -> Tuple[Figure, Axes, Dict[str, Union[Color, ColorA]]]:
     """Balanced/small label-space scatter.
 
+    Parameters
+    ----------
+    data_plot: pd.DataFrame
+        DataFrame containing the data to plot. Must include columns specified by x_col, y_col
+        and the label columns.
+    x_col: str
+        Name of the column in data_plot to use for x-axis values.
+    y_col: str
+        Name of the column in data_plot to use for y-axis values.
+    class_col: str
+        Name of the column in data_plot that contains the "Class" labels.
+    subclass_col: str
+        Name of the column in data_plot that contains the "Subclass" labels.
+    palette_or_cmap: Union[Palette, str, mpl.colors.Colormap]
+        Either a dict mapping subclass labels to colors, or a colormap name / object to generate
+        a palette from. If a colormap is provided, a palette will be generated based on the present
+        (Class, Subclass) pairs.
+    class_order: Optional[Sequence[str]]
+        Optional ordering of classes for palette generation. If None, classes will be sorted alphabetically.
+    subclass_order_within_class: Optional[Mapping[str, Sequence[str]]]
+        Optional ordering of subclasses within each class for palette generation. If None, subclasses will be sorted
+        alphabetically within each class.
+    cmap_single_position: float
+        If palette_or_cmap is a colormap and there is only one present subclass, this position in the colormap
+        will be used for the color. Must be between 0 and 1. Default is 0.5 (the middle of the colormap).
+    cmap_rgb_only: bool
+        If True and palette_or_cmap is a colormap, the generated palette will contain RGB tuples instead of RGBA.
+        Default is False (RGBA).
+    figsize: Tuple[float, float]
+        Size of the figure to create.
+    title: str
+        Title of the plot.
+    
     - If `palette_or_cmap` is a dict: uses it directly (Subclass -> color).
     - Else: creates a Subclass palette from a colormap using present (Class, Subclass) order.
     """
@@ -286,7 +322,48 @@ def scatter_plot_hierarchical_labels(
     hide_axis_labels: bool = True,
     ax: Optional[Axes] = None,
 ) -> Tuple[Figure, Axes, Dict[str, str], Dict[str, Union[Color, ColorA]]]:
-    """Hierarchical-label scatter (builds display labels and palette internally)."""
+    """Hierarchical-label scatter (builds display labels and palette internally).
+    
+    Parameters
+    ----------
+    data_plot: pd.DataFrame
+        DataFrame containing the data to plot. Must include columns specified by x_col, y_col
+        and the label columns.
+    x_col: str
+        Name of the column in data_plot to use for x-axis values.
+    y_col: str
+        Name of the column in data_plot to use for y-axis values.
+    superclass_col: str
+        Name of the column in data_plot that contains the "Superclass" labels.
+    class_col: str
+        Name of the column in data_plot that contains the "Class" labels.
+    display_label_col: str
+        Name of the column to create in data_plot for the display labels (combination of class and superclass).
+    inplace: bool
+        Whether to modify data_plot in place or work on a copy.
+    low_superclass_thres: int
+        Superclasses with fewer than this many samples will be considered "low" and their classes may
+        be collapsed into the rare_label, depending on other parameters.
+    low_class_thres: int
+        Classes with fewer than this many samples will be considered "low" and may be collapsed into the rare_label,
+        depending on other parameters.
+    max_superclass_size: int
+        Superclasses with more than this many samples will be considered "huge" and all their classes will be
+        collapsed into "other" (with display label superclass + sep + other_suffix).
+    rare_label: str
+        Display label to use for collapsed rare classes/superclasses.
+    sep: str
+        Separator to use when combining superclass and class into display labels.
+    top_k_classes: Optional[int]
+        If not None, only the top K most common classes within each superclass will be kept as explicit display labels
+        (even if they are above the low_class_thres), and the rest will be collapsed into the rare_label.
+    other_suffix: str
+        Suffix to use for the "other" category when collapsing huge superclasses.
+    figsize: Tuple[float, float]
+        Size of the figure to create.
+    title: str
+        Title of the plot.
+    """
     _validate_required_columns(data_plot, [x_col, y_col, superclass_col, class_col])
 
     df = data_plot if inplace else data_plot.copy()
