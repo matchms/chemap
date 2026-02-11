@@ -26,11 +26,12 @@ jobs:
           which python
           python --version
 
-      - name: Build package and create dev environment
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        
+      - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip poetry
-          poetry config virtualenvs.create false
-          poetry install --with dev
+          uv pip install -e ".[dev]"
   
       - name: Show pip list
         run: |
@@ -38,7 +39,7 @@ jobs:
   
       - name: Test with coverage
         run: |
-          poetry run pytest --cov --cov-report term --cov-report xml --junitxml=xunit-result.xml
+          pytest --cov --cov-report term --cov-report xml --junitxml=xunit-result.xml
   
       - name: Correct coverage paths
         run: sed -i "s+$PWD/++g" coverage.xml
