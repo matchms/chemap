@@ -1,8 +1,9 @@
 from dataclasses import dataclass
-from typing import Dict, List, Mapping, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, Union
 import matplotlib as mpl
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
@@ -12,16 +13,14 @@ from chemap.plotting import (
     PaletteConfig,
     PresentPairsConfig,
     build_hier_label_map,
+    build_selected_label_column,
+    build_selected_palette,
     make_hier_palette,
     map_classes_to_display_labels,
     palette_from_cmap,
     sorted_present_pairs,
 )
-
-
-Color = Tuple[float, float, float]  # RGB
-ColorA = Tuple[float, float, float, float]  # RGBA
-Palette = Mapping[str, Union[Color, ColorA]]
+from .types import Color, ColorA, Palette
 
 
 # ---------------------------------------------------------------------------
@@ -432,3 +431,142 @@ def scatter_plot_hierarchical_labels(
     )
 
     return fig, ax, class_to_label, dict(label_to_color)
+
+
+# ---------------------------------------------------------------------------
+# Wrapper for few selected classes
+# ---------------------------------------------------------------------------
+
+def scatter_plot_selected_only(
+    data_plot: pd.DataFrame,
+    *,
+    x_col: str = "x",
+    y_col: str = "y",
+    class_col: str = "Class",
+    subclass_col: str = "Subclass",
+    selected_classes: Optional[Sequence[Any]] = None,
+    selected_subclasses: Optional[Sequence[Any]] = None,
+    selected_size_relative: float = 2.0,
+    other_label: str = "other",
+    other_color: Union[Color, ColorA] = (0.8, 0.8, 0.8, 0.1),
+    palette_or_cmap: Union[Palette, str, Any] = "viridis",
+    cmap_single_position: float = 0.5,
+    cmap_rgb_only: bool = False,
+    style: ScatterStyle = ScatterStyle(),
+    ax: Optional[Axes] = None,
+) -> Tuple[Figure, Axes, Dict[str, Union[Color, ColorA]]]:
+    """Scatter plot where only a selected subset is colored; all other points are gray 'other'.
+
+    Additionally, selected points get a larger marker size: `style.s * selected_size_relative`.
+
+    Parameters
+    ----------
+    data_plot: pd.DataFrame
+        DataFrame containing the data to plot. Must include columns specified by x_col, y_col
+        and the label columns.
+    x_col: str
+        Name of the column in data_plot to use for x-axis values.
+    y_col: str
+        Name of the column in data_plot to use for y-axis values.
+    class_col: str
+        Name of the column in data_plot that contains the "Class" labels.
+    subclass_col: str
+        Name of the column in data_plot that contains the "Subclass" labels.
+    selected_classes: Optional[Sequence[Any]]
+        List of class labels to highlight. If None, no classes are highlighted.
+    selected_subclasses: Optional[Sequence[Any]]
+        List of subclass labels to highlight. If None, no subclasses are highlighted.
+    selected_size_relative: float
+        Factor by which to increase the marker size of selected points. Must be > 0.
+    other_label: str
+        Label to use for the 'other' category in the legend.
+    """
+    if selected_size_relative <= 0:
+        raise ValueError("selected_size_relative must be > 0")
+
+    for col in (x_col, y_col, class_col, subclass_col):
+        if col not in data_plot.columns:
+            raise KeyError(f"data_plot is missing required column: {col}")
+
+    df = data_plot.copy()
+
+    df["_selected_label"] = build_selected_label_column(
+        df,
+        class_col=class_col,
+        subclass_col=subclass_col,
+        selected_classes=selected_classes,
+        selected_subclasses=selected_subclasses,
+        other_label=other_label,
+    )
+
+    # Identify selected vs other (for size scaling)
+    is_other = df["_selected_label"].astype(str).eq(other_label)
+    sizes = np.where(is_other.to_numpy(), style.s, style.s * float(selected_size_relative))
+
+    # Legend order: selected labels alphabetical, then other last
+    present = df["_selected_label"].dropna().map(str).unique().tolist()
+    present_non_other = sorted([p for p in present if p != other_label], key=str.lower)
+    legend_labels = present_non_other + ([other_label] if other_label in present else [])
+
+    palette = build_selected_palette(
+        legend_labels,
+        palette_or_cmap=palette_or_cmap,
+        other_label=other_label,
+        other_color=other_color,
+        cmap_single_position=cmap_single_position,
+        cmap_rgb_only=cmap_rgb_only,
+    )
+
+    colors = df["_selected_label"].map(lambda v: palette.get(str(v), other_color))
+
+    if ax is None:
+        fig, ax = plt.subplots(figsize=style.figsize)
+    else:
+        fig = ax.figure
+
+    ax.scatter(
+        df[x_col].to_numpy(),
+        df[y_col].to_numpy(),
+        c=[_to_rgba(c) for c in colors.tolist()],
+        s=sizes,
+        alpha=style.alpha,
+        linewidths=style.linewidths,
+    )
+
+    ax.set_title(style.title)
+
+    if style.hide_ticks:
+        ax.set_xticks([])
+        ax.set_yticks([])
+    if style.hide_axis_labels:
+        ax.set_xlabel("")
+        ax.set_ylabel("")
+
+    from matplotlib.lines import Line2D
+
+    handles: List[Line2D] = []
+    for lbl in legend_labels:
+        handles.append(
+            Line2D(
+                [0],
+                [0],
+                marker="o",
+                linestyle="",
+                markersize=style.legend_markersize,
+                markerfacecolor=_to_rgba(palette.get(lbl, other_color)),
+                markeredgecolor="none",
+                label=str(lbl),
+                alpha=style.legend_alpha,
+            )
+        )
+
+    ax.legend(
+        handles=handles,
+        title=style.legend_title if style.legend_title is not None else "selected",
+        loc=style.legend_loc,
+        frameon=style.legend_frameon,
+        ncol=style.legend_ncol,
+    )
+
+    fig.tight_layout()
+    return fig, ax, palette
