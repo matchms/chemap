@@ -60,6 +60,7 @@ def create_chem_space_umap(
     # UMAP (CPU / umap-learn)
     n_neighbors: int = 15,
     min_dist: float = 0.25,
+    n_jobs: int = -1,
     umap_random_state: Optional[int] = 40476,
     distance_function: str = "tanimoto",
 ) -> pd.DataFrame:
@@ -87,6 +88,9 @@ def create_chem_space_umap(
         (For binary fingerprints this is harmless)
     n_neighbors, min_dist, umap_random_state:
         Standard UMAP parameters.
+    n_jobs:
+        Passed to umap-learn UMAP for parallelism. Ignores random_state when n_jobs != 1.
+        Default -1 uses all CPUs.
     distance_function:
         Currently only "tanimoto" is supported. Metric is chosen based on config.
 
@@ -130,7 +134,7 @@ def create_chem_space_umap(
         min_dist=float(min_dist),
         metric=metric,
         random_state=umap_random_state,
-        n_jobs=-1,
+        n_jobs=n_jobs,
     )
 
     # Convert to CSR matrix
