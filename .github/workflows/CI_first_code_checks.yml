@@ -46,4 +46,4 @@ jobs:
         run: sed -i "s+$PWD/++g" coverage.xml
   
       - name: Run ruff linter
-        run: ruff check --output-format=github
+        run: uv run ruff check --output-format=github
