@@ -1,3 +1,4 @@
+from .chem_space_umap import create_chem_space_umap, create_chem_space_umap_gpu
 from .colormap_handling import (
     CmapPaletteConfig,
     LabelMapConfig,
@@ -26,6 +27,8 @@ __all__ = [
     "build_hier_label_map",
     "build_selected_label_column",
     "build_selected_palette",
+    "create_chem_space_umap",
+    "create_chem_space_umap_gpu",
     "make_hier_palette",
     "map_classes_to_display_labels",
     "palette_from_cmap",
