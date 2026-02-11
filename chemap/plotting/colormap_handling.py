@@ -5,6 +5,7 @@ import matplotlib as mpl
 import matplotlib.colors as mcolors
 import numpy as np
 import pandas as pd
+from .types import Color, ColorA, Palette
 
 
 # ---------------------------------------------------------------------------
@@ -553,3 +554,97 @@ def palette_from_cmap(
     if config.rgb_only:
         return {k: mcolors.to_rgb(v) for k, v in out.items()}
     return {k: mcolors.to_rgba(v) for k, v in out.items()}
+
+
+def build_selected_label_column(
+    data_plot: pd.DataFrame,
+    *,
+    class_col: str,
+    subclass_col: str,
+    selected_classes: Optional[Sequence[Any]] = None,
+    selected_subclasses: Optional[Sequence[Any]] = None,
+    other_label: str = "other",
+) -> pd.Series:
+    """Return a Series of labels where only selected classes/subclasses keep their name, else 'other'."""
+    if selected_classes is None and selected_subclasses is None:
+        raise ValueError("At least one of selected_classes or selected_subclasses must be provided.")
+
+    sel_class = set(map(str, selected_classes)) if selected_classes is not None else None
+    sel_sub = set(map(str, selected_subclasses)) if selected_subclasses is not None else None
+
+    cls = data_plot[class_col].map(lambda x: None if pd.isna(x) else str(x))
+    sub = data_plot[subclass_col].map(lambda x: None if pd.isna(x) else str(x))
+
+    keep = pd.Series(False, index=data_plot.index)
+
+    if sel_class is not None:
+        keep |= cls.isin(sel_class)
+    if sel_sub is not None:
+        keep |= sub.isin(sel_sub)
+
+    # Prefer subclass label if selected_subclasses provided and the row matches a selected subclass;
+    # otherwise use class label if selected_classes provided and it matches; else other.
+    out = pd.Series(other_label, index=data_plot.index, dtype="object")
+
+    if sel_sub is not None:
+        mask_sub = sub.isin(sel_sub)
+        out.loc[mask_sub] = sub.loc[mask_sub]
+
+    if sel_class is not None:
+        mask_cls = cls.isin(sel_class) & ~sub.isin(sel_sub) if sel_sub is not None else cls.isin(sel_class)
+        out.loc[mask_cls] = cls.loc[mask_cls]
+
+    # Everything not in keep stays "other"
+    out.loc[~keep] = other_label
+    return out
+
+
+def build_selected_palette(
+    labels_in_plot: Sequence[str],
+    *,
+    palette_or_cmap: Union[Palette, str, Any] = "viridis",
+    other_label: str = "other",
+    other_color: Union[Color, ColorA] = (0.7, 0.7, 0.7, 1.0),
+    cmap_single_position: float = 0.5,
+    cmap_rgb_only: bool = False,
+) -> Dict[str, Union[Color, ColorA]]:
+    """Build a palette for the reduced label set (selected + other)."""
+    # Keep stable unique labels
+    seen: set[str] = set()
+    uniq: list[str] = []
+    for x in labels_in_plot:
+        if x not in seen:
+            seen.add(x)
+            uniq.append(x)
+
+    # Ensure other is present (and last in legend if we want)
+    if other_label not in seen:
+        uniq.append(other_label)
+
+    if isinstance(palette_or_cmap, Mapping):
+        # Use dict directly, but always force other_label color
+        pal = {str(k): v for k, v in palette_or_cmap.items()}
+        pal[other_label] = other_color
+        return pal
+
+    # Otherwise: colormap-derived palette for non-other labels, other fixed gray.
+    import matplotlib as mpl  # local to keep module import light
+    cmap = mpl.colormaps.get_cmap(str(palette_or_cmap))
+
+    non_other = [x for x in uniq if x != other_label]
+    n = len(non_other)
+    if n == 0:
+        return {other_label: other_color}
+
+    positions = np.array([float(np.clip(cmap_single_position, 0.0, 1.0))]) if n == 1 else np.linspace(0.0, 1.0, n)
+    pal = {lbl: cmap(float(pos)) for lbl, pos in zip(non_other, positions, strict=True)}
+
+    # Normalize to RGB/RGBA
+    if cmap_rgb_only:
+        pal = {k: mcolors.to_rgb(v) for k, v in pal.items()}
+        pal[other_label] = mcolors.to_rgb(other_color)
+    else:
+        pal = {k: mcolors.to_rgba(v) for k, v in pal.items()}
+        pal[other_label] = mcolors.to_rgba(other_color)
+
+    return pal
