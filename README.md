@@ -121,6 +121,41 @@ print("skfp AtomPair (CSR):", X_ap_csr.shape, X_ap_csr.dtype, "nnz=", X_ap_csr.n
 
 # (Optional) convert CSR -> dense if you need a NumPy array downstream:
 X_ap = X_ap_csr.toarray().astype(np.float32, copy=False)
-
-
 ```
+
+## UMAP Chemical Space Visualization
+`chemap` provides functions to compute UMAP coordinates based on molecular fingerprints.
+Depending on your system and installation, this can be either via a very fast `cuml` library by
+using `create_chem_space_umap_gpu`, which then only allows to use "cosine" as a metric, as well
+as folded/fixed sized fingerprints.
+The alternative is a numba-based variant `create_chem_space_umap` (so this is still optimized,
+but much slower than the GPU version). While this is slower, it in return allows to use Tanimoto
+as a metric and can also handle unfolded fingerprints.
+
+Example:
+```python
+from rdkit.Chem import rdFingerprintGenerator
+from chemap.plotting import create_chem_space_umap, scatter_plot_hierarchical_labels
+
+data_plot = create_chem_space_umap(
+    data_compounds,  # dataframe with smiles and class/subclass etc. information
+    col_smiles="smiles",
+    inplace=False,
+    x_col="x",
+    y_col="y",
+    fpgen = rdFingerprintGenerator.GetMorganGenerator(radius=9, fpSize=4096),
+)
+
+# Plot
+fig, ax, _, _  = scatter_plot_hierarchical_labels(
+    data_plot,
+    x_col="x",
+    y_col="y",
+    superclass_col="Superclass",
+    class_col="Class",
+    low_superclass_thres=2500,
+    low_class_thres=5000,
+    max_superclass_size=10_000,
+```
+
+
