@@ -44,7 +44,11 @@ def encode_duplicates(
     if n_items is not None and indices.size and np.any(indices >= n_items):
         raise ValueError("duplicates contains indices outside [0, n_items)")
 
-    return DuplicatesNPZ(indices=indices.astype(dtype, copy=False), indptr=indptr.astype(np.int64, copy=False), n_items=n_items)
+    return DuplicatesNPZ(
+        indices=indices.astype(dtype, copy=False),
+        indptr=indptr.astype(np.int64, copy=False),
+        n_items=n_items
+        )
 
 
 def decode_duplicates(encoded: DuplicatesNPZ) -> List[List[int]]:
