@@ -6,7 +6,6 @@ import matplotlib.colors as mcolors
 import numpy as np
 import pandas as pd
 from chemap.types import Color, ColorA, Palette
-from .colormaps import green_yellow_red
 
 
 # ---------------------------------------------------------------------------
@@ -664,5 +663,9 @@ def n_colors_from_cmap(
     """
     if n <= 0:
         return []
+
+    if isinstance(cmap, str):
+        # Assume it is a known matplotlib colormap
+        cmap = mpl.colormaps[cmap]
 
     return cmap(np.linspace(0, 1, n))
