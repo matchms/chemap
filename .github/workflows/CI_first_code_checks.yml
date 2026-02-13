@@ -8,6 +8,7 @@ on:
         description: Tag for manually running CI first code check workflow
         required: False
         default: ''
+  workflow_call:
 
 jobs:
 
@@ -15,9 +16,9 @@ jobs:
     name: first code check / python-3.13 / ubuntu-latest
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.13'
 
@@ -27,12 +28,15 @@ jobs:
           python --version
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v4
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
       
-      - name: Create venv and install dependencies
+      - name: Install dependencies
         run: |
-          uv venv
-          uv pip install -e ".[dev]"
+          # Add --locked flag, after lockfile for all platforms with all optional deps is generated
+          # Just install cpu for now
+          uv sync --extra cpu --dev
       
       - name: Show pip list
         run: |
