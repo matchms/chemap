@@ -3,7 +3,8 @@ from typing import Any, List, Mapping, Optional, Sequence, Tuple
 import matplotlib.pyplot as plt
 import numpy as np
 from chemap.benchmarking import compute_duplicate_max_mass_differences
-from chemap.plotting.colormap_handling import _colors_green_to_red
+from chemap.plotting.colormap_handling import n_colors_from_cmap
+from chemap.plotting.colormaps import green_yellow_red
 from chemap.types import Bins
 
 
@@ -106,7 +107,7 @@ def plot_duplicate_bins(
     *,
     figsize: Tuple[float, float] = (10, 6),
     sort_by_total: bool = True,
-    cmap: str = "RdYlGn_r",
+    cmap = green_yellow_red,
     bar_height: float = 0.5,
     show_totals: bool = True,
     totals_fmt: str = "{value:.0f}",
@@ -124,7 +125,7 @@ def plot_duplicate_bins(
     sort_by_total:
         Sort experiments descending by total duplicates.
     cmap:
-        Colormap used to create bin colors (green->red default).
+        hand over desired matplotlib colormap. Default is a green-yellow-red colormap.
     bar_height:
         Height of each horizontal bar.
     show_totals:
@@ -154,7 +155,7 @@ def plot_duplicate_bins(
         res.sort(key=lambda r: r.total, reverse=True)
 
     bin_labels = res[0].bin_labels
-    colors = _colors_green_to_red(n_bins, cmap=cmap)
+    colors = n_colors_from_cmap(n_bins, cmap)
 
     fig, ax = plt.subplots(figsize=figsize)
 
@@ -203,9 +204,10 @@ def plot_duplicates_by_experiment(
     bins: Optional[Bins] = None,
     unit: str = "Da",
     # plot options
+    cmap = green_yellow_red,
+    title: str = "Duplicate fingerprints plot",
     figsize: Tuple[float, float] = (10, 6),
     sort_by_total: bool = True,
-    cmap: str = "RdYlGn_r",
 ) -> Tuple[plt.Figure, plt.Axes, List[DuplicateBinResult]]:
     """Compute binned duplicate stats per experiment and plot them.
 
@@ -233,7 +235,8 @@ def plot_duplicates_by_experiment(
     fig, ax = plot_duplicate_bins(
         results,
         figsize=figsize,
-        sort_by_total=sort_by_total,
         cmap=cmap,
+        sort_by_total=sort_by_total,
+        title=title,
     )
     return fig, ax, results
