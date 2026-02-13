@@ -8,6 +8,7 @@ on:
         description: Tag for manually running CI first code check workflow
         required: False
         default: ''
+  workflow_call:
 
 jobs:
 
