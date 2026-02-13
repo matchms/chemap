@@ -198,12 +198,10 @@ def plot_duplicate_bins(
 
 def plot_duplicates_by_experiment(
     experiments: Mapping[str, Mapping[str, Any]],
+    masses_arr: np.ndarray,
     *,
     bins: Optional[Bins] = None,
     unit: str = "Da",
-    # keys inside each experiment dict
-    duplicates_key: str = "duplicates",
-    masses_key: str = "masses",
     # plot options
     figsize: Tuple[float, float] = (10, 6),
     sort_by_total: bool = True,
@@ -215,28 +213,17 @@ def plot_duplicates_by_experiment(
     ----------
     experiments:
         Mapping experiment_name -> dict-like with:
-          - `duplicates_key`: duplicates groups (from find_duplicates_with_hashing)
-          - `masses_key`: 1D masses aligned to fingerprints/SMILES order
+          - name: duplicates groups (from find_duplicates_with_hashing)
     bins, unit
         Passed to `compute_duplicate_bin_counts`.
-    duplicates_key, masses_key:
-        Field names within each experiment mapping.
     figsize, sort_by_total, cmap:
         Passed to `plot_duplicate_bins`.
-
-    Returns
-    -------
-    (fig, ax, results)
     """
     results: List[DuplicateBinResult] = []
-    for name, payload in experiments.items():
-        if duplicates_key not in payload or masses_key not in payload:
-            raise KeyError(
-                f"Experiment {name!r} must contain keys {duplicates_key!r} and {masses_key!r}"
-            )
+    for name, duplicates in experiments.items():
         res = compute_duplicate_bin_counts(
-            payload[duplicates_key],
-            payload[masses_key],
+            duplicates,
+            masses_arr,
             bins=bins,
             unit=unit,
             name=str(name),

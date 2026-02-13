@@ -198,12 +198,13 @@ def test_plot_duplicates_by_experiment_happy_path():
     duplicates_b = [[2, 3, 4]]       # max diffs [10,5,10]
 
     experiments = {
-        "A": {"duplicates": duplicates_a, "masses": masses},
-        "B": {"duplicates": duplicates_b, "masses": masses},
+        "A": duplicates_a,
+        "B": duplicates_b,
     }
 
     fig, ax, results = plot_duplicates_by_experiment(
         experiments,
+        masses,
         bins=[(0, 1), (1, 10), (10, np.inf)],
         sort_by_total=True,
     )
@@ -217,9 +218,3 @@ def test_plot_duplicates_by_experiment_happy_path():
     assert totals["B"] == 3
 
     plt.close(fig)
-
-
-def test_plot_duplicates_by_experiment_missing_keys_raises():
-    experiments = {"A": {"duplicates": [[0, 1]]}}  # missing masses
-    with pytest.raises(KeyError):
-        _ = plot_duplicates_by_experiment(experiments)
