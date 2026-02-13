@@ -5,7 +5,7 @@ import matplotlib as mpl
 import matplotlib.colors as mcolors
 import numpy as np
 import pandas as pd
-from ..types import Color, ColorA, Palette
+from chemap.types import Color, ColorA, Palette
 
 
 # ---------------------------------------------------------------------------

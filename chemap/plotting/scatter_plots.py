@@ -20,7 +20,7 @@ from chemap.plotting import (
     palette_from_cmap,
     sorted_present_pairs,
 )
-from .types import Color, ColorA, Palette
+from chemap.types import Color, ColorA, Palette
 
 
 # ---------------------------------------------------------------------------
