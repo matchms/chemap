@@ -114,6 +114,7 @@ def plot_duplicate_bins(
     xlabel: str = "Compounds with Fingerprint Duplicates",
     title: str = "Duplicate Statistics by Experiment",
     legend_title: str = "Maximum mass difference\n(for identical fingerprints)",
+    ax: Optional[plt.Axes] = None,
 ) -> Tuple[plt.Figure, plt.Axes]:
     """Plot stacked horizontal bars of duplicate counts across bins.
 
@@ -135,9 +136,6 @@ def plot_duplicate_bins(
     xlabel, title, legend_title:
         Plot labels.
 
-    Returns
-    -------
-    (fig, ax)
     """
     if len(results) == 0:
         raise ValueError("results must be non-empty")
@@ -157,7 +155,10 @@ def plot_duplicate_bins(
     bin_labels = res[0].bin_labels
     colors = n_colors_from_cmap(n_bins, cmap)
 
-    fig, ax = plt.subplots(figsize=figsize)
+    if ax is None:
+        fig, ax = plt.subplots(figsize=figsize)
+    else:
+        fig = ax.figure
 
     y_positions = np.arange(len(res))
     left_stack = np.zeros(len(res), dtype=float)
@@ -207,6 +208,7 @@ def plot_duplicates_by_experiment(
     cmap = green_yellow_red,
     title: str = "Duplicate fingerprints plot",
     figsize: Tuple[float, float] = (10, 6),
+    ax: Optional[plt.Axes] = None,
     sort_by_total: bool = True,
 ) -> Tuple[plt.Figure, plt.Axes, List[DuplicateBinResult]]:
     """Compute binned duplicate stats per experiment and plot them.
@@ -238,5 +240,6 @@ def plot_duplicates_by_experiment(
         cmap=cmap,
         sort_by_total=sort_by_total,
         title=title,
+        ax=ax,
     )
     return fig, ax, results
