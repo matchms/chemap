@@ -6,6 +6,7 @@ import matplotlib.colors as mcolors
 import numpy as np
 import pandas as pd
 from chemap.types import Color, ColorA, Palette
+from .colormaps import green_yellow_red
 
 
 # ---------------------------------------------------------------------------
@@ -650,55 +651,18 @@ def build_selected_palette(
     return pal
 
 
-def _colors_green_to_red(
+def n_colors_from_cmap(
     n: int,
-    *,
-    cmap: str = "RdYlGn_r",
-    dark_yellow: Tuple[float, float, float, float] = (0.72, 0.58, 0.12, 1.0),
-    dark_yellow_strength: float = 0.55,
+    cmap,
 ) -> List[Tuple[float, float, float, float]]:
-    """Get n colors from green -> (darker) yellow -> dark red (RGBA).
-
-    Uses a base colormap for endpoints (green/red), but post-processes colors near the
-    midpoint (yellow region) by blending towards `dark_yellow`, to avoid overly bright
-    / white-ish yellows (e.g. in RdYlGn).
+    """Get n colors from green -> yellow -> dark red (RGBA).
 
     Parameters
     ----------
     n:
         Number of colors.
-    cmap:
-        Base colormap name (default uses green->red direction via RdYlGn_r).
-    dark_yellow:
-        RGBA color used as the "darker yellow" target.
-    dark_yellow_strength:
-        Blend factor in [0, 1]. Higher -> darker midpoint.
     """
     if n <= 0:
         return []
 
-    if not (0.0 <= dark_yellow_strength <= 1.0):
-        raise ValueError("dark_yellow_strength must be in [0, 1]")
-
-    cm_obj = mpl.colormaps.get_cmap(cmap)
-    xs = np.linspace(0.0, 1.0, n)
-
-    base = np.array([cm_obj(float(x)) for x in xs], dtype=float)  # (n,4)
-
-    # Weight peaks at the center and fades to 0 at the ends.
-    # Triangular shape: 0 at edges, 1 at center.
-    w = 1.0 - 2.0 * np.abs(xs - 0.5)  # in [0,1]
-    w = np.clip(w, 0.0, 1.0)
-
-    # Optional: concentrate influence more tightly around the center.
-    # (gamma > 1 narrows the midpoint region affected)
-    gamma = 1.6
-    w = w**gamma
-
-    target = np.array(dark_yellow, dtype=float)
-    blend = (w * dark_yellow_strength)[:, None]  # (n,1)
-
-    out = base * (1.0 - blend) + target * blend
-    out = np.clip(out, 0.0, 1.0)
-
-    return [tuple(map(float, rgba)) for rgba in out]
+    return cmap(np.linspace(0, 1, n))
