@@ -35,7 +35,8 @@ jobs:
       - name: Install dependencies
         run: |
           # Add --locked flag, after lockfile for all platforms with all optional deps is generated
-          uv sync --all-extras --dev
+          # Just install cpu for now
+          uv sync --extra cpu --dev
       
       - name: Show pip list
         run: |
