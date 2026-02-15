@@ -10,7 +10,7 @@ BytesLike = Union[bytes, bytearray, memoryview]
 class MHFPEncoderLite:
     """
     Compatibility-focused reimplementation of the original mhfp.encoder.MHFPEncoder.
-    (Original is from the Reymond group: https://github.com/reymond-group/mhfp)s
+    (Original is from the Reymond group: https://github.com/reymond-group/mhfp)
 
     Notes
     -----
