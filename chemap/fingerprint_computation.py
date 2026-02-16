@@ -532,9 +532,13 @@ def _skfp_configure_output(
     """
     Configure scikit-fingerprints/sklearn transformer to match (folded, return_csr).
 
-    - folded=True : use the transformer's folded output
-    - folded=False: require variant='raw_bits' if supported
-    - return_csr=True (only when folded=True): prefer transformer sparse CSR if supported
+    Supports two modes:
+    1) scikit-fingerprints classic:
+       - unfolded via variant='raw_bits' (if available)
+       - folded via variant='folded' (if variant exists)
+    2) ChemapBaseFingerprint style:
+       - unfolded via folded=False (no variant)
+       - folded via folded=True
     """
     params = fpgen.get_params(deep=False)
     updates: Dict[str, Any] = {}
@@ -545,22 +549,42 @@ def _skfp_configure_output(
     if "n_jobs" in params:
         updates["n_jobs"] = n_jobs
 
+    chemap_style = "folded" in params  # ChemapBaseFingerprint exposes folded param
+
+    # -------------------------
+    # UNFOLDED (cfg.folded=False)
+    # -------------------------
     if not cfg.folded:
+        if chemap_style:
+            if params.get("folded") is not False:
+                updates["folded"] = False
+            # We don't force sparse; unfolded returns lists anyway.
+            return _clone_transformer_with_params(fpgen, updates) if updates else fpgen
+
+        # classic scikit-fingerprints route: needs variant='raw_bits'
         if "variant" not in params:
             raise NotImplementedError(
-                "Requested folded=False (unfolded), but this transformer does not expose a `variant` parameter "
-                "for an unfolded feature space (e.g., variant='raw_bits')."
+                "Requested folded=False (unfolded), but this transformer does not support "
+                "either chemap-style `folded` switching or an skfp-style `variant='raw_bits'`."
             )
+
         if params.get("variant") != "raw_bits":
             updates["variant"] = "raw_bits"
 
-        # For unfolded conversion we can accept either dense or CSR outputs, so we do not force "sparse".
         return _clone_transformer_with_params(fpgen, updates) if updates else fpgen
 
-    # folded=True
+    # ------------------------
+    # FOLDED (cfg.folded=True)
+    # ------------------------
+    if chemap_style:
+        if params.get("folded") is not True:
+            updates["folded"] = True
+
+    # If it's classic skfp and currently set to raw_bits, restore folded variant
     if "variant" in params and params.get("variant") == "raw_bits":
         updates["variant"] = "folded"
 
+    # Prefer CSR if requested and supported
     if "sparse" in params:
         desired = bool(cfg.return_csr)
         if params.get("sparse") != desired:
@@ -577,35 +601,83 @@ def _compute_sklearn(
     show_progress: bool = False,
     n_jobs: int,
 ) -> FingerprintResult:
+    """
+    Compute fingerprints using sklearn/scikit-fingerprints style transformers.
+
+    Supports two kinds of transformers for unfolded output (cfg.folded=False):
+      1) Classic scikit-fingerprints: unfolded via variant='raw_bits' (matrix output)
+      2) ChemapBaseFingerprint style: unfolded via folded=False (list output)
+
+    Invalid-policy behavior:
+      - drop: returns only valid rows (shorter output)
+      - keep: aligns output to input, inserting empty rows for invalid smiles
+      - raise: raises on first invalid smiles
+    """
     fp = _skfp_configure_output(fpgen, cfg, show_progress=show_progress, n_jobs=n_jobs)
+
+    # Parse molecules with robust handling (None for invalid SMILES)
     mol_transformer = RobustMolTransformer(n_jobs=n_jobs)
     mols = mol_transformer.transform(smiles)
 
-    # Determine valid/invalid molecules and handle invalid according to policy.
     valid_idx = [i for i, m in enumerate(mols) if m is not None]
     invalid_idx = [i for i, m in enumerate(mols) if m is None]
 
     if invalid_idx and cfg.invalid_policy == "raise":
         raise ValueError(f"Invalid SMILES: {smiles[invalid_idx[0]]}")
 
-    # Fit/transform only valid mols (safe for most transformers)
     valid_mols = [mols[i] for i in valid_idx]
 
+    # Most skfp transformers are "fit-less" but expose fit; keep consistent behavior.
     fp.fit(valid_mols)
     X_valid = fp.transform(valid_mols)
 
-    # If policy is drop: just return X_valid (current behavior)
+    # -----------------------------
+    # Case A: transformer returns chemap-unfolded formats directly (list output)
+    # -----------------------------
+    is_list_unfolded = isinstance(X_valid, list) and (
+        len(X_valid) == 0
+        or isinstance(X_valid[0], np.ndarray)
+        or (isinstance(X_valid[0], tuple) and len(X_valid[0]) == 2)
+    )
+
+    if is_list_unfolded:
+        # In this case, we assume we are already in unfolded mode (cfg.folded=False).
+        # If cfg.folded=True but the transformer returns lists, that's an API mismatch.
+        if cfg.folded:
+            raise TypeError(
+                "Transformer returned chemap-unfolded list output while cfg.folded=True. "
+                "This likely indicates a misconfigured transformer."
+            )
+
+        if cfg.invalid_policy == "drop":
+            return X_valid
+
+        # keep alignment: reinsert empty rows
+        N = len(smiles)
+        if cfg.count:
+            X_full: UnfoldedCount = [_empty_unfolded_count() for _ in range(N)]
+        else:
+            X_full: UnfoldedBinary = [_empty_unfolded_binary() for _ in range(N)]
+
+        for out_i, orig_i in enumerate(valid_idx):
+            X_full[orig_i] = X_valid[out_i]  # type: ignore[index]
+
+        return X_full
+
+    # -----------------------------
+    # Case B: transformer returns a matrix (dense or sparse)
+    # -----------------------------
+
+    # Handle invalid-policy re-insertion for matrix outputs
     if cfg.invalid_policy == "drop":
         X = X_valid
     else:
-        # policy keep: reinsert empty rows to match input length
         N = len(smiles)
 
         if sp.issparse(X_valid):
             X_valid = X_valid.tocsr().astype(np.float32)
             D = X_valid.shape[1]
             X = sp.csr_matrix((N, D), dtype=np.float32)
-            # place valid rows
             X[valid_idx, :] = X_valid
         else:
             X_valid = np.asarray(X_valid, dtype=np.float32)
@@ -613,8 +685,8 @@ def _compute_sklearn(
             X = np.zeros((N, D), dtype=np.float32)
             X[valid_idx, :] = X_valid
 
+    # If unfolded requested, convert matrix -> chemap unfolded formats
     if not cfg.folded:
-        # unfolded output
         if sp.issparse(X):
             return _csr_matrix_to_unfolded(X.tocsr().astype(np.float32), cfg)
         return _dense_matrix_to_unfolded(np.asarray(X, dtype=np.float32), cfg)
