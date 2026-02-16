@@ -24,7 +24,6 @@ from dataclasses import dataclass
 from hashlib import sha1
 from typing import Dict, List, Optional, Set
 import numpy as np
-from rdkit import Chem
 from rdkit.Chem import Mol, MolToSmiles, PathToSubmol
 from rdkit.Chem.rdmolops import FindAtomEnvironmentOfRadiusN, GetDistanceMatrix
 from chemap.fingerprints.mhfp import MHFPEncoderLite

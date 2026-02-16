@@ -1,6 +1,5 @@
 from collections.abc import Sequence
 from typing import Any
-import numpy as np
 from joblib import Parallel, delayed
 from rdkit.Chem import Mol
 from skfp.bases import BaseFingerprintTransformer
