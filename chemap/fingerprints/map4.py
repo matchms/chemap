@@ -9,7 +9,7 @@ Which is based on the original MAP4 implementation
 
 There are a few particular aspects about this implementation tough:
 - Folded output:
-    * binary (uint8) uses MHFP-style MinHash folding (chemap.additional_fingerprints.mhfp)
+    * binary (uint8) uses MHFP-style MinHash folding (chemap.fingerprints.mhfp)
     * count  (float32) accumulates true shingle multiplicities into folded bins (not a MinHash signature,
     so different from the original implementation!)
 - Unfolded output:

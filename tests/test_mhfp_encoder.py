@@ -2,7 +2,7 @@ import struct
 from hashlib import sha1
 import numpy as np
 import pytest
-from chemap.additional_fingerprints.mhfp import MHFPEncoderLite
+from chemap.fingerprints.mhfp import MHFPEncoderLite
 
 
 def _ref_token_hash32(token: bytes) -> np.uint32:
