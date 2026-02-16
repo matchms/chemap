@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 from rdkit import Chem
-from chemap.additional_fingerprints.map4 import MAP4FPGen, _MAP4Shingler
+from chemap.fingerprints.map4 import MAP4FPGen, _MAP4Shingler
 
 
 def mol_from_smiles(smiles: str) -> Chem.Mol:

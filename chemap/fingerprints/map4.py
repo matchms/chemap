@@ -27,7 +27,7 @@ import numpy as np
 from rdkit import Chem
 from rdkit.Chem import Mol, MolToSmiles, PathToSubmol
 from rdkit.Chem.rdmolops import FindAtomEnvironmentOfRadiusN, GetDistanceMatrix
-from chemap.additional_fingerprints.mhfp import MHFPEncoderLite
+from chemap.fingerprints.mhfp import MHFPEncoderLite
 
 
 # -----------------------------
