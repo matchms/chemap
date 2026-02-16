@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 import scipy.sparse as sp
 from rdkit import Chem
-from chemap.additional_fingerprints import ElementCountFingerprint
+from chemap.fingerprints import ElementCountFingerprint
 
 
 def mol(smiles: str):
