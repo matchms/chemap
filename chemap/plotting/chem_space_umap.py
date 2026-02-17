@@ -7,7 +7,7 @@ from chemap.fingerprint_conversions import fingerprints_to_csr
 from chemap.metrics import (
     tanimoto_distance_dense,
     tanimoto_distance_unfolded_binary,
-    tanimoto_distance_unfolded_count,
+    tanimoto_distance_sparse,
 )
 
 
@@ -25,18 +25,17 @@ def _choose_cpu_metric(config: FingerprintConfig, distance_function: str) -> Any
     - unfolded + binary => tanimoto_distance_unfolded_binary
     - folded (usually dense/packed) => tanimoto_distance_dense
     """
+    if distance_function.lower() == "cosine":
+        return "cosine"
     if distance_function.lower() != "tanimoto":
         raise ValueError(
             f"Unsupported distance_function={distance_function!r}. "
-            "Currently only 'tanimoto' is supported here."
+            "Currently only 'tanimoto' and 'cosine' is supported here."
         )
-
 
     if getattr(config, "folded", False):
         return tanimoto_distance_dense
-    if getattr(config, "count", False):
-        return tanimoto_distance_unfolded_count
-    return tanimoto_distance_unfolded_binary
+    return tanimoto_distance_sparse
 
 
 def _log1p_csr_inplace(X) -> Any:
@@ -61,7 +60,7 @@ def create_chem_space_umap(
     n_neighbors: int = 15,
     min_dist: float = 0.25,
     n_jobs: int = -1,
-    umap_random_state: Optional[int] = 40476,
+    umap_random_state: Optional[int] = None,
     distance_function: str = "tanimoto",
 ) -> pd.DataFrame:
     """Compute fingerprints (CPU) and create 2D UMAP coordinates (CPU).
@@ -220,17 +219,16 @@ def create_chem_space_umap_gpu(
         show_progress=show_progress,
     )
 
-    # Convert to numeric matrix.
-    fps_csr = fingerprints_to_csr(fingerprints).X
-    fps = fps_csr.toarray()
+    # Convert to sparse array
+    # fps_csr = fingerprints_to_csr(fingerprints).X
 
     # Reduce memory footprint (works well for count fingerprints)
     if not log_count:
         # stays integer-like
-        fps = fps.astype(np.int8, copy=False)
+        fps = fingerprints.astype(np.int8, copy=False)
     else:
         # log1p returns float
-        fps = np.log1p(fps).astype(np.float32, copy=False)
+        fps = np.log1p(fingerprints).astype(np.float32, copy=False)
 
     umap_model = cuUMAP(
         n_neighbors=int(n_neighbors),
