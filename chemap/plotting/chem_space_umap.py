@@ -6,7 +6,6 @@ from chemap import FingerprintConfig, compute_fingerprints
 from chemap.fingerprint_conversions import fingerprints_to_csr
 from chemap.metrics import (
     tanimoto_distance_dense,
-    tanimoto_distance_unfolded_binary,
     tanimoto_distance_sparse,
 )
 
