@@ -7,6 +7,7 @@ from joblib import Parallel, delayed
 from rdkit import Chem
 from sklearn.base import BaseEstimator, TransformerMixin
 from tqdm import tqdm
+from chemap.types import UnfoldedBinary, UnfoldedCount
 
 
 # -----------------------------
@@ -15,9 +16,6 @@ from tqdm import tqdm
 
 InvalidPolicy = Literal["drop", "keep", "raise"]
 Scaling = Optional[Literal["log"]]
-
-UnfoldedBinary = List[np.ndarray]  # list of int64 feature IDs per molecule
-UnfoldedCount = List[Tuple[np.ndarray, np.ndarray]]  # list of (int64 feature IDs, float32 values)
 
 FingerprintResult = Union[np.ndarray, sp.csr_matrix, UnfoldedBinary, UnfoldedCount]
 
