@@ -50,7 +50,12 @@ from chemap import compute_fingerprints, DatasetLoader, FingerprintConfig
 
 
 ds_loader = DatasetLoader()
+# Load a single dataset from a local file
 smiles = ds_loader.load("tests/data/smiles.csv")
+# or load a dataset collection from a DOI based registry (e.g., Zenodo)
+files = ds_loader.load_collection("10.5281/zenodo.18682050")
+# pass one of the absolute file paths from files
+smiles = ds_loader.load(files[0])
 
 # ----------------------------
 # RDKit: Morgan (folded, dense)
