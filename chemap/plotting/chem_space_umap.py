@@ -32,7 +32,7 @@ def _choose_cpu_metric(config: FingerprintConfig, distance_function: str) -> Any
             "Currently only 'tanimoto' and 'cosine' is supported here."
         )
 
-    if getattr(config, "folded", False):
+    if getattr(config, "folded", True):
         return tanimoto_distance_dense
     return tanimoto_distance_sparse
 
@@ -54,9 +54,9 @@ def create_chem_space_umap(
     fpgen: Optional[Any] = None,
     fingerprint_config: Optional[FingerprintConfig] = None,
     show_progress: bool = True,
-    log_count: bool = True,
+    log_count: bool = False,
     # UMAP (CPU / umap-learn)
-    n_neighbors: int = 15,
+    n_neighbors: int = 100,
     min_dist: float = 0.25,
     n_jobs: int = -1,
     umap_random_state: Optional[int] = None,
@@ -133,6 +133,7 @@ def create_chem_space_umap(
         metric=metric,
         random_state=umap_random_state,
         n_jobs=n_jobs,
+        init="random",  # needed because for lower n_neighbors it could fail when the knn graph is disconnected
     )
 
     # Convert to CSR matrix
