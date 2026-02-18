@@ -1,6 +1,4 @@
 from typing import Tuple
-import matplotlib as mpl
-import matplotlib.colors as mcolors
 import numpy as np
 import pandas as pd
 from chemap.plotting import (
@@ -10,7 +8,6 @@ from chemap.plotting import (
     build_hier_label_map,
     make_hier_palette,
     map_classes_to_display_labels,
-    palette_from_cmap,
     sorted_present_pairs,
 )
 
