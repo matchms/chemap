@@ -19,22 +19,36 @@ Or, to include UMAP computation abilities on either CPU or GPU chose one of the 
 - GPU version (CUDA 12): ```pip install "chemap[gpu-cu12]"```
 - GPU version (CUDA 13): ```pip install "chemap[gpu-cu13]"```
 
-## Fingerprint computations
+## Fingerprint computations (choose from  `RDKit` or `scikit-fingerprints`)
 Fingerprints can be computed using generators from `RDKit` or `scikit-fingerprints`. 
 This includes popular fingerprint types such as:
 
 ### Path-based and circular fingerprints
 - RDKit fingerprints
 - Morgan fingerprints
+- FCFP fingerprints
+- ...
 
 ### Predefined substructure fingerprints
 - MACCS fingerprints
 - PubChem fingerprints
 - Klekota-Roth fingerprints
+- ...
 
 ### Topological distance based fingerprints
 - Atom pair fingerprints
-- MAP4 fingerprints
+
+
+## Fingerprint computations II (implemtations in `chemap`)
+Due to some existing limitations with present implementations, chemap also provides some fingerprint generator.
+Those allow to generate folded as well as unfolded fingerprints, each either as binary or count variant.
+
+- MAP4 fingerprint --> `from chemap.fingerprints import MAP4Gen`
+- Lingo fingerprint --> `from chemap.fingerprints import LingoFingerprint`
+
+And, not really a fingerprint in the classical sense, but usefull as a baseline for benchmarking tasks (or as an additional component of a fingerprint), chemap provides a
+simple element count vector/fingerprint. This does nothing more than simply count the number of H's, C's, O's etc.
+- ElementCount fingerprint --> `from chemap.fingerprints import ElementCountFingerprint`
 
 
 
