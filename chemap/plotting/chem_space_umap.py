@@ -20,9 +20,8 @@ def _ensure_smiles_column(df: pd.DataFrame, col_smiles: str) -> None:
 def _choose_cpu_metric(config: FingerprintConfig, distance_function: str) -> Any:
     """Return a metric callable/object suitable for umap-learn based on FingerprintConfig.
     
-    - unfolded + count => tanimoto_distance_unfolded_count
-    - unfolded + binary => tanimoto_distance_unfolded_binary
-    - folded (usually dense/packed) => tanimoto_distance_dense
+    - unfolded => tanimoto_distance_sparse
+    - folded => tanimoto_distance_dense
     """
     if distance_function.lower() == "cosine":
         return "cosine"
@@ -125,7 +124,7 @@ def create_chem_space_umap(
         ) from e
 
     metric = _choose_cpu_metric(fingerprint_config, distance_function)
-
+    
     reducer = umap.UMAP(
         n_neighbors=int(n_neighbors),
         n_components=2,
@@ -133,17 +132,20 @@ def create_chem_space_umap(
         metric=metric,
         random_state=umap_random_state,
         n_jobs=n_jobs,
-        init="random",  # needed because for lower n_neighbors it could fail when the knn graph is disconnected
+        init="random",
     )
 
-    # Convert to CSR matrix
-    fps_csr = fingerprints_to_csr(fingerprints).X
+    if not fingerprint_config.folded:
+        # Convert to CSR matrix
+        fps_csr = fingerprints_to_csr(fingerprints).X
+    
+        if log_count:
+            # Works well for count fingerprints ( for binary it's essentially unchanged).
+            fps_csr = _log1p_csr_inplace(fps_csr)
 
-    if log_count:
-        # Works well for count fingerprints ( for binary it's essentially unchanged).
-        fps_csr = _log1p_csr_inplace(fps_csr)
-
-    coords = reducer.fit_transform(fps_csr)
+        coords = reducer.fit_transform(fps_csr)
+    else:
+        coords = reducer.fit_transform(fingerprints)
 
     df[x_col] = coords[:, 0]
     df[y_col] = coords[:, 1]
