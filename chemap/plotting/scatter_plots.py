@@ -168,9 +168,6 @@ def scatter_plot_all_classes(
     # ordering options (same semantics as before)
     class_order: Optional[Sequence[str]] = None,
     subclass_order_within_class: Optional[Mapping[str, Sequence[str]]] = None,
-    # cmap palette options (used only if palette_or_cmap is not a dict)
-    cmap_single_position: float = 0.5,
-    cmap_rgb_only: bool = False,
     # plotting style (surface the key knobs; advanced users can pass ScatterStyle via style=)
     figsize: Tuple[float, float] = (20, 20),
     title: str = "UMAP of embeddings",
@@ -211,12 +208,6 @@ def scatter_plot_all_classes(
     subclass_order_within_class: Optional[Mapping[str, Sequence[str]]]
         Optional ordering of subclasses within each class for palette generation. If None, subclasses will be sorted
         alphabetically within each class.
-    cmap_single_position: float
-        If palette_or_cmap is a colormap and there is only one present subclass, this position in the colormap
-        will be used for the color. Must be between 0 and 1. Default is 0.5 (the middle of the colormap).
-    cmap_rgb_only: bool
-        If True and palette_or_cmap is a colormap, the generated palette will contain RGB tuples instead of RGBA.
-        Default is False (RGBA).
     figsize: Tuple[float, float]
         Size of the figure to create.
     title: str
@@ -242,10 +233,8 @@ def scatter_plot_all_classes(
         palette: Dict[str, Union[Color, ColorA]] = {str(k): v for k, v in palette_or_cmap.items()}
     else:
         palette = palette_from_cmap(
-            palette_or_cmap,
             present_subclasses,
-            single_position=cmap_single_position,
-            rgb_only=cmap_rgb_only,
+            palette_or_cmap,
         )
 
     style = ScatterStyle(
