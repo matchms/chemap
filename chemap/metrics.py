@@ -72,7 +72,7 @@ def tanimoto_distance_dense(a: np.ndarray, b: np.ndarray) -> float:
 # For binary unfolded: values are implicitly 1.0.
 
 @numba.njit(cache=True, fastmath=True)
-def tanimoto_similarity_unfolded_binary(bits1: np.ndarray, bits2: np.ndarray) -> float:
+def tanimoto_similarity_sparse_binary(bits1: np.ndarray, bits2: np.ndarray) -> float:
     """
     Binary unfolded similarity: Jaccard on sorted unique bit arrays.
 
@@ -106,76 +106,8 @@ def tanimoto_similarity_unfolded_binary(bits1: np.ndarray, bits2: np.ndarray) ->
 
 
 @numba.njit(cache=True, fastmath=True)
-def tanimoto_similarity_unfolded_count(
-        bits1: np.ndarray, vals1: np.ndarray,
-        bits2: np.ndarray, vals2: np.ndarray
-        ) -> float:
-    """
-    Count/weight unfolded similarity between two sparse vectors given as sorted (bits, values).
-    sim = sum(min)/sum(max)
-
-    Parameters
-    ----------
-    bits1
-        1D numpy array of sorted bit indices (unique) for vector 1.
-    vals1
-        1D numpy array of counts for vector 1.
-    bits2
-        1D numpy array of sorted bit indices (unique) for vector 2.
-    vals2
-        1D numpy array of counts for vector 2.
-    """
-    i = 0
-    j = 0
-    n1 = bits1.shape[0]
-    n2 = bits2.shape[0]
-    min_sum = 0.0
-    max_sum = 0.0
-
-    while i < n1 and j < n2:
-        b1 = bits1[i]
-        b2 = bits2[j]
-        if b1 == b2:
-            v1 = vals1[i]
-            v2 = vals2[j]
-            if v1 < v2:
-                min_sum += v1
-                max_sum += v2
-            else:
-                min_sum += v2
-                max_sum += v1
-            i += 1
-            j += 1
-        elif b1 < b2:
-            max_sum += vals1[i]
-            i += 1
-        else:
-            max_sum += vals2[j]
-            j += 1
-
-    while i < n1:
-        max_sum += vals1[i]
-        i += 1
-    while j < n2:
-        max_sum += vals2[j]
-        j += 1
-
-    if max_sum == 0.0:
-        return 1.0
-    return min_sum / max_sum
-
-
-@numba.njit(cache=True, fastmath=True)
-def tanimoto_distance_unfolded_count(
-        bits1: np.ndarray, vals1: np.ndarray,
-        bits2: np.ndarray, vals2: np.ndarray
-        ) -> float:
-    return 1.0 - tanimoto_similarity_unfolded_count(bits1, vals1, bits2, vals2)
-
-
-@numba.njit(cache=True, fastmath=True)
-def tanimoto_distance_unfolded_binary(bits1: np.ndarray, bits2: np.ndarray) -> float:
-    return 1.0 - tanimoto_similarity_unfolded_binary(bits1, bits2)
+def tanimoto_distance_sparse_binary(bits1: np.ndarray, bits2: np.ndarray) -> float:
+    return 1.0 - tanimoto_similarity_sparse_binary(bits1, bits2)
 
 
 # ---- Sparse fixed-size CSR (single pair) ----
@@ -287,9 +219,9 @@ def tanimoto_similarity_matrix_dense(references: np.ndarray, queries: np.ndarray
 # This is O(R*Q*avg_nnz_merge) and can be expensive for large R,Q.
 # For huge datasets prefer ANN (PyNNDescent/UMAP) with `tanimoto_distance_sparse`.
 @numba.njit(parallel=True, fastmath=True, cache=True)
-def tanimoto_similarity_matrix_unfolded_binary(references, queries) -> np.ndarray:
+def tanimoto_similarity_matrix_sparse_binary(references, queries) -> np.ndarray:
     """
-    Pairwise Tanimoto similarity between two sets of unfolded binary fingerprints.
+    Pairwise Tanimoto similarity between two sets of unfolded or sparse binary fingerprints.
 
     Parameters
     ----------
@@ -303,12 +235,12 @@ def tanimoto_similarity_matrix_unfolded_binary(references, queries) -> np.ndarra
     out = np.empty((R, Q), dtype=np.float32)
     for i in numba.prange(R):
         for j in range(Q):
-            out[i, j] = tanimoto_similarity_unfolded_binary(references[i], queries[j])
+            out[i, j] = tanimoto_similarity_sparse_binary(references[i], queries[j])
     return out
 
 
 @numba.njit(parallel=True, fastmath=True, cache=True)
-def tanimoto_similarity_matrix_unfolded_count(
+def tanimoto_similarity_matrix_sparse(
         references_bits,
         references_vals,
         queries_bits,
@@ -333,7 +265,7 @@ def tanimoto_similarity_matrix_unfolded_count(
     out = np.empty((R, Q), dtype=np.float32)
     for i in numba.prange(R):
         for j in range(Q):
-            out[i, j] = tanimoto_similarity_unfolded_count(
+            out[i, j] = tanimoto_similarity_sparse(
                 references_bits[i], references_vals[i],
                 queries_bits[j], queries_vals[j],
             )
@@ -415,12 +347,12 @@ def tanimoto_similarity(
     if kind == "unfolded-binary":
         bits1 = np.asarray(a, dtype=np.int64)  # type: ignore[arg-type]
         bits2 = np.asarray(b, dtype=np.int64)  # type: ignore[arg-type]
-        return float(tanimoto_similarity_unfolded_binary(bits1, bits2))
+        return float(tanimoto_similarity_sparse_binary(bits1, bits2))
 
     if kind == "unfolded-count":
         bits1, vals1 = a  # type: ignore[misc]
         bits2, vals2 = b  # type: ignore[misc]
-        return float(tanimoto_similarity_unfolded_count(
+        return float(tanimoto_similarity_sparse(
             np.asarray(bits1, dtype=np.int64),
             np.asarray(vals1, dtype=np.float32),
             np.asarray(bits2, dtype=np.int64),

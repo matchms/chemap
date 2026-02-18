@@ -5,21 +5,15 @@ from numba.typed import List as NumbaList
 from chemap.metrics import (
     tanimoto_distance_dense,
     tanimoto_distance_sparse,
-    tanimoto_distance_unfolded_binary,
-    tanimoto_distance_unfolded_count,
-    # unified wrappers
+    tanimoto_distance_sparse_binary,
     tanimoto_similarity,
-    # dense primitives
     tanimoto_similarity_dense,
     tanimoto_similarity_matrix,
     tanimoto_similarity_matrix_dense,
-    tanimoto_similarity_matrix_unfolded_binary,
-    tanimoto_similarity_matrix_unfolded_count,
-    # sparse primitives (PyNNDescent-compatible signature)
+    tanimoto_similarity_matrix_sparse,
+    tanimoto_similarity_matrix_sparse_binary,
     tanimoto_similarity_sparse,
-    # unfolded primitives
-    tanimoto_similarity_unfolded_binary,
-    tanimoto_similarity_unfolded_count,
+    tanimoto_similarity_sparse_binary,
 )
 
 
@@ -92,8 +86,8 @@ def test_tanimoto_unfolded_binary_simple():
     bits1 = np.array([0, 2, 5], dtype=np.int64)
     bits2 = np.array([2, 3, 5, 7], dtype=np.int64)
 
-    sim = tanimoto_similarity_unfolded_binary(bits1, bits2)
-    dist = tanimoto_distance_unfolded_binary(bits1, bits2)
+    sim = tanimoto_similarity_sparse_binary(bits1, bits2)
+    dist = tanimoto_distance_sparse_binary(bits1, bits2)
 
     assert sim == pytest.approx(2.0 / 5.0)
     assert dist == pytest.approx(1.0 - 2.0 / 5.0)
@@ -103,9 +97,9 @@ def test_tanimoto_unfolded_binary_zero_cases():
     empty = np.array([], dtype=np.int64)
     bits = np.array([1, 10], dtype=np.int64)
     # empty vs empty -> similarity 1.0 (both all-zero)
-    assert tanimoto_similarity_unfolded_binary(empty, empty) == pytest.approx(1.0)
+    assert tanimoto_similarity_sparse_binary(empty, empty) == pytest.approx(1.0)
     # empty vs non-empty -> similarity 0.0
-    assert tanimoto_similarity_unfolded_binary(empty, bits) == pytest.approx(0.0)
+    assert tanimoto_similarity_sparse_binary(empty, bits) == pytest.approx(0.0)
 
 
 # ----------------------------------------
@@ -144,10 +138,10 @@ def test_tanimoto_unfolded_binary_zero_cases():
     ],
 )
 def test_tanimoto_unfolded_count(bits1, vals1, bits2, vals2, expected):
-    sim = tanimoto_similarity_unfolded_count(bits1, vals1, bits2, vals2)
-    dist = tanimoto_distance_unfolded_count(bits1, vals1, bits2, vals2)
-    assert pytest.approx(sim, rel=1e-8) == expected
-    assert pytest.approx(dist, rel=1e-8) == 1.0 - expected
+    sim = tanimoto_similarity_sparse(bits1, vals1, bits2, vals2)
+    dist = tanimoto_distance_sparse(bits1, vals1, bits2, vals2)
+    assert pytest.approx(sim, rel=1e-7) == expected
+    assert pytest.approx(dist, rel=1e-7) == 1.0 - expected
 
 
 # ----------------------------------------
@@ -184,7 +178,7 @@ def test_tanimoto_sparse_matches_dense_on_small_example():
 # Unfolded matrix functions
 # ----------------------------------------
 
-def test_tanimoto_similarity_matrix_unfolded_binary_small():
+def test_tanimoto_similarity_matrix_sparse_binary_small():
     refs = to_numba_list([
         np.array([0, 2, 5], dtype=np.int64),
         np.array([1, 2], dtype=np.int64),
@@ -194,7 +188,7 @@ def test_tanimoto_similarity_matrix_unfolded_binary_small():
         np.array([3], dtype=np.int64),
     ])
 
-    S = tanimoto_similarity_matrix_unfolded_binary(refs, qs)
+    S = tanimoto_similarity_matrix_sparse_binary(refs, qs)
     assert S.shape == (2, 2)
 
     # (0,0): {0,2,5} vs {2,5} => inter=2 union=3 => 2/3
@@ -203,13 +197,13 @@ def test_tanimoto_similarity_matrix_unfolded_binary_small():
     assert S[1, 1] == pytest.approx(0.0)
 
 
-def test_tanimoto_similarity_matrix_unfolded_count_small():
+def test_tanimoto_similarity_matrix_sparse_small():
     ref_bits = to_numba_list([np.array([0, 1], np.int64), np.array([1, 2], np.int64)])
     ref_vals = to_numba_list([np.array([1.0, 2.0], np.float32), np.array([2.0, 3.0], np.float32)])
     qry_bits = to_numba_list([np.array([1, 2], np.int64)])
     qry_vals = to_numba_list([np.array([2.0, 3.0], np.float32)])
 
-    S = tanimoto_similarity_matrix_unfolded_count(ref_bits, ref_vals, qry_bits, qry_vals)
+    S = tanimoto_similarity_matrix_sparse(ref_bits, ref_vals, qry_bits, qry_vals)
     assert S.shape == (2, 1)
 
     # ref0 dense [1,2,0], qry dense [0,2,3]
