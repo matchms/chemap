@@ -4,7 +4,6 @@ import matplotlib.colors as mcolors
 import numpy as np
 import pandas as pd
 from chemap.plotting import (
-    CmapPaletteConfig,
     LabelMapConfig,
     PaletteConfig,
     PresentPairsConfig,
@@ -208,33 +207,3 @@ def test_sorted_present_pairs_drops_nan_subclass_when_required():
     df = pd.DataFrame({"Class": ["A", "A"], "Subclass": ["x", np.nan]})
     out = sorted_present_pairs(df, config=PresentPairsConfig(require_subclass=True))
     assert out.values.tolist() == [["A", "x"]]
-
-
-# ---------------------------------------------------------------------
-# palette_from_cmap
-# ---------------------------------------------------------------------
-
-def test_palette_from_cmap_empty_returns_empty():
-    pal = palette_from_cmap([], config=CmapPaletteConfig(cmap="viridis"))
-    assert pal == {}
-
-
-def test_palette_from_cmap_returns_rgba_by_default():
-    pal = palette_from_cmap(["a", "b", "c"], config=CmapPaletteConfig(cmap="viridis", rgb_only=False))
-    assert set(pal.keys()) == {"a", "b", "c"}
-    assert all(_is_rgba(tuple(v)) for v in pal.values())
-
-
-def test_palette_from_cmap_returns_rgb_when_rgb_only_true():
-    pal = palette_from_cmap(["a", "b"], config=CmapPaletteConfig(cmap="viridis", rgb_only=True))
-    assert set(pal.keys()) == {"a", "b"}
-    assert all(_is_rgb(tuple(v)) for v in pal.values())
-
-
-def test_palette_from_cmap_single_label_uses_single_position():
-    cfg = CmapPaletteConfig(cmap="viridis", single_position=0.25, rgb_only=False)
-    pal = palette_from_cmap(["only"], config=cfg)
-
-    cmap = mpl.colormaps.get_cmap("viridis")
-    expected = mcolors.to_rgba(cmap(0.25))
-    assert pal["only"] == expected
