@@ -496,23 +496,9 @@ def sorted_present_pairs(
 # Simple palette helper
 # ---------------------------------------------------------------------------
 
-@dataclass(frozen=True)
-class CmapPaletteConfig:
-    """Configuration for generating a categorical palette from a colormap."""
-
-    cmap: str = "viridis"
-
-    # If n == 1, position within the colormap to sample.
-    single_position: float = 0.5
-
-    # If True, return RGB tuples; otherwise return RGBA tuples (matplotlib default).
-    rgb_only: bool = False
-
-
 def palette_from_cmap(
     labels: Sequence[Any],
-    *,
-    config: CmapPaletteConfig = CmapPaletteConfig(),
+    cmap: str = "viridis",
 ) -> Dict[str, Tuple[float, float, float] | Tuple[float, float, float, float]]:
     """Evenly distribute labels along a colormap.
 
@@ -520,40 +506,22 @@ def palette_from_cmap(
     ----------
     labels:
         Sequence of labels. Labels are stringified for keys.
-    config:
-        Palette configuration including the colormap.
+    cmap:
+        String of matplotlib predefined colormap, or own colormap object.
 
     Returns
     -------
     Dict label -> color, where color is RGBA by default (or RGB if `rgb_only=True`).
 
-    Notes
-    -----
-    - If there is only one label, samples at `single_position` (default 0.5).
-    - For multiple labels, samples evenly across [0, 1].
     """
-    cmap = _get_cmap(config.cmap)
+    cmap = _get_cmap(cmap)
 
-    seen: set[str] = set()
-    uniq: list[str] = []
-    for lbl in labels:
-        if pd.isna(lbl):
-            continue
-        s = str(lbl)
-        if s not in seen:
-            seen.add(s)
-            uniq.append(s)
-
-    n = len(uniq)
+    n = len(labels)
     if n == 0:
         return {}
 
-    positions = np.array([float(np.clip(config.single_position, 0.0, 1.0))]) if n == 1 else np.linspace(0.0, 1.0, n)
-    out: Dict[str, Any] = {lbl: cmap(float(pos)) for lbl, pos in zip(uniq, positions, strict=True)}
-
-    if config.rgb_only:
-        return {k: mcolors.to_rgb(v) for k, v in out.items()}
-    return {k: mcolors.to_rgba(v) for k, v in out.items()}
+    positions = np.linspace(0.0, 1.0, n) if n > 1 else np.array([0.5])
+    return {lbl: cmap(pos) for lbl, pos in zip(labels, positions)}
 
 
 def build_selected_label_column(

@@ -1,6 +1,5 @@
 from .chem_space_umap import create_chem_space_umap, create_chem_space_umap_gpu
 from .colormap_handling import (
-    CmapPaletteConfig,
     LabelMapConfig,
     PaletteConfig,
     PresentPairsConfig,
@@ -20,7 +19,6 @@ from .scatter_plots import (
 
 
 __all__ = [
-    "CmapPaletteConfig",
     "LabelMapConfig",
     "PaletteConfig",
     "PresentPairsConfig",
