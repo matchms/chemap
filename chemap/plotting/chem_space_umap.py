@@ -163,9 +163,9 @@ def create_chem_space_umap_gpu(
     fpgen: Optional[Any] = None,
     fingerprint_config: Optional[FingerprintConfig] = None,
     show_progress: bool = True,
-    log_count: bool = True,
+    log_count: bool = False,
     # UMAP (GPU / cuML)
-    n_neighbors: int = 15,
+    n_neighbors: int = 100,
     min_dist: float = 0.25,
 ) -> pd.DataFrame:
     """Compute fingerprints and create 2D UMAP coordinates using cuML (GPU).
@@ -220,9 +220,6 @@ def create_chem_space_umap_gpu(
         config=fingerprint_config,
         show_progress=show_progress,
     )
-
-    # Convert to sparse array
-    # fps_csr = fingerprints_to_csr(fingerprints).X
 
     # Reduce memory footprint (works well for count fingerprints)
     if not log_count:
