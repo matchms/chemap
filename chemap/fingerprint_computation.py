@@ -339,7 +339,12 @@ def _rdkit_unfolded(
 
     if cfg.count:
         out: UnfoldedCount = []
-        for s, mol in zip(smiles, mols):
+        for s, mol in tqdm(
+                zip(smiles, mols),
+                disable=not show_progress,
+                desc="Compute fingerprints",
+                total=len(mols)
+                ):
             if mol is None:
                 _handle_invalid(cfg.invalid_policy, s)
                 if cfg.invalid_policy == "keep":
@@ -356,7 +361,12 @@ def _rdkit_unfolded(
         return out
 
     out: UnfoldedBinary = []
-    for s, mol in zip(smiles, mols):
+    for s, mol in tqdm(
+            zip(smiles, mols),
+            disable=not show_progress,
+            desc="Compute fingerprints",
+            total=len(mols)
+            ):
         if mol is None:
             _handle_invalid(cfg.invalid_policy, s)
             if cfg.invalid_policy == "keep":
@@ -386,7 +396,12 @@ def _rdkit_folded_dense(
     n_features: Optional[int] = None
     pending_invalid: List[int] = []  # indices in `rows` that need backfill after we learn D
 
-    for s, mol in zip(smiles, mols):
+    for s, mol in tqdm(
+            zip(smiles, mols),
+            disable=not show_progress,
+            desc="Compute fingerprints",
+            total=len(mols)
+            ):
         if mol is None:
             _handle_invalid(cfg.invalid_policy, s)
             if cfg.invalid_policy == "keep":
@@ -450,7 +465,12 @@ def _rdkit_folded_csr(
     if cfg.folded_weights is not None:
         w = np.asarray(cfg.folded_weights, dtype=np.float32).ravel()
 
-    for s, mol in zip(smiles, mols):
+    for s, mol in tqdm(
+            zip(smiles, mols),
+            disable=not show_progress,
+            desc="Compute fingerprints",
+            total=len(mols)
+            ):
         if mol is None:
             _handle_invalid(cfg.invalid_policy, s)
 
