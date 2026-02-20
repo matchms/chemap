@@ -1,4 +1,5 @@
 from .chem_space_umap import create_chem_space_umap, create_chem_space_umap_gpu
+from .cleveland import ClevelandStyle, cleveland_dotplot
 from .colormap_handling import (
     LabelMapConfig,
     PaletteConfig,
@@ -19,12 +20,14 @@ from .scatter_plots import (
 
 
 __all__ = [
+    "ClevelandStyle",
     "LabelMapConfig",
     "PaletteConfig",
     "PresentPairsConfig",
     "build_hier_label_map",
     "build_selected_label_column",
     "build_selected_palette",
+    "cleveland_dotplot",
     "create_chem_space_umap",
     "create_chem_space_umap_gpu",
     "make_hier_palette",

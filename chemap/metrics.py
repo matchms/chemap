@@ -219,55 +219,55 @@ def tanimoto_similarity_matrix_dense(references: np.ndarray, queries: np.ndarray
 # This is O(R*Q*avg_nnz_merge) and can be expensive for large R,Q.
 # For huge datasets prefer ANN (PyNNDescent/UMAP) with `tanimoto_distance_sparse`.
 @numba.njit(parallel=True, fastmath=True, cache=True)
-def tanimoto_similarity_matrix_sparse_binary(references, queries) -> np.ndarray:
+def tanimoto_similarity_matrix_sparse_binary(fingerprints_1, fingerprints_2) -> np.ndarray:
     """
     Pairwise Tanimoto similarity between two sets of unfolded or sparse binary fingerprints.
 
     Parameters
     ----------
-    references
+    fingerprints_1
         List of 1D numpy arrays of sorted bit indices (unique).
-    queries
+    fingerprints_2
         List of 1D numpy arrays of sorted bit indices (unique).
     """
-    R = len(references)
-    Q = len(queries)
+    R = len(fingerprints_1)
+    Q = len(fingerprints_2)
     out = np.empty((R, Q), dtype=np.float32)
     for i in numba.prange(R):
         for j in range(Q):
-            out[i, j] = tanimoto_similarity_sparse_binary(references[i], queries[j])
+            out[i, j] = tanimoto_similarity_sparse_binary(fingerprints_1[i], fingerprints_2[j])
     return out
 
 
 @numba.njit(parallel=True, fastmath=True, cache=True)
 def tanimoto_similarity_matrix_sparse(
-        references_bits,
-        references_vals,
-        queries_bits,
-        queries_vals
+        fingerprints_1_bits,
+        fingerprints_1_vals,
+        fingerprints_2_bits,
+        fingerprints_2_vals
         ) -> np.ndarray:
     """
     Pairwise generalized Tanimoto similarity between two sets of unfolded count/weight fingerprints.
 
     Parameters
     ----------
-    references_bits
+    fingerprints_1_bits
         List of 1D numpy arrays of sorted bit indices (unique) for reference fingerprints.
-    references_vals
+    fingerprints_1_vals
         List of 1D numpy arrays of counts/weights for reference fingerprints.
-    queries_bits
+    fingerprints_2_bits
         List of 1D numpy arrays of sorted bit indices (unique) for query fingerprints.
-    queries_vals
+    fingerprints_2_vals
         List of 1D numpy arrays of counts/weights for query fingerprints.
     """
-    R = len(references_bits)
-    Q = len(queries_bits)
+    R = len(fingerprints_1_bits)
+    Q = len(fingerprints_2_bits)
     out = np.empty((R, Q), dtype=np.float32)
     for i in numba.prange(R):
         for j in range(Q):
             out[i, j] = tanimoto_similarity_sparse(
-                references_bits[i], references_vals[i],
-                queries_bits[j], queries_vals[j],
+                fingerprints_1_bits[i], fingerprints_1_vals[i],
+                fingerprints_2_bits[j], fingerprints_2_vals[j],
             )
     return out
 
