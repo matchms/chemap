@@ -154,7 +154,7 @@ def create_chem_space_umap(
         if scaling == "log":
             fingerprints = np.log1p(fingerprints)
         elif scaling == "tfidf":
-            fingerprints *= idf_normalized(fingerprints, fingerprints.shape[0])
+            fingerprints *= idf_normalized((fingerprints > 0).sum(axis=0), fingerprints.shape[0])
         coords = reducer.fit_transform(fingerprints)
 
     df[x_col] = coords[:, 0]
@@ -261,7 +261,7 @@ def create_chem_space_umap_gpu(
     if scaling == "log":
         fingerprints = np.log1p(fingerprints).astype(np.float32, copy=False)
     elif scaling == "tfidf":
-        fingerprints *= idf_normalized(fingerprints, fingerprints.shape[0])
+        fingerprints *= idf_normalized((fingerprints > 0).sum(axis=0), fingerprints.shape[0])
     else:
         fingerprints = fingerprints.astype(np.int8, copy=False)
 
