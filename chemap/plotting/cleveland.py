@@ -60,6 +60,8 @@ def cleveland_dotplot(
     show_legends: bool = True,
     color_legend_title: str = "Setting",
     marker_legend_title: str = "Variant",
+    color_legend_position: str = "lower left",
+    marker_legend_position: str = "lower right",
 
     style: ClevelandStyle = ClevelandStyle(),
 ) -> Tuple[Figure, Axes]:
@@ -260,16 +262,16 @@ def cleveland_dotplot(
 
         # Place legends similarly to your original if both exist
         if marker_handles and color_handles:
-            leg1 = ax.legend(handles=marker_handles, loc="lower right",
+            leg1 = ax.legend(handles=marker_handles, loc=marker_legend_position,
                              title=marker_legend_title, frameon=True)
             ax.add_artist(leg1)
-            ax.legend(handles=color_handles, loc="lower left",
+            ax.legend(handles=color_handles, loc=color_legend_position,
                       title=color_legend_title, frameon=True)
         elif marker_handles:
-            ax.legend(handles=marker_handles, loc="lower right",
+            ax.legend(handles=marker_handles, loc=marker_legend_position,
                       title=marker_legend_title, frameon=True)
         elif color_handles:
-            ax.legend(handles=color_handles, loc="lower left",
+            ax.legend(handles=color_handles, loc=color_legend_position,
                       title=color_legend_title, frameon=True)
 
     return fig, ax
