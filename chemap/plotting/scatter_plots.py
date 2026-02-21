@@ -36,6 +36,9 @@ class ScatterStyle:
     alpha: float = 0.25
     linewidths: float = 0.0
 
+    display_legend: bool = True
+    legend_outside: bool = False
+
     legend_title: Optional[str] = None
     legend_loc: str = "lower left"
     legend_frameon: bool = False
@@ -132,21 +135,40 @@ def scatter_plot_base(
         ax.set_xlabel("")
         ax.set_ylabel("")
 
-    legend_title = style.legend_title if style.legend_title is not None else label_col
-    handles = _build_legend_handles(
-        legend_labels,
-        palette,
-        markersize=style.legend_markersize,
-        alpha=style.legend_alpha,
-    )
+    # ---- legend (optional + outside option) ----
+    if style.display_legend:
+        legend_title = style.legend_title if style.legend_title is not None else label_col
+        handles = _build_legend_handles(
+            legend_labels,
+            palette,
+            markersize=style.legend_markersize,
+            alpha=style.legend_alpha,
+        )
 
-    ax.legend(
-        handles=handles,
-        title=legend_title,
-        loc=style.legend_loc,
-        frameon=style.legend_frameon,
-        ncol=style.legend_ncol,
-    )
+        if style.legend_outside:
+            # Put legend outside right; loc controls anchor point of legend box itself.
+            ax.legend(
+                handles=handles,
+                title=legend_title,
+                loc="center left",
+                bbox_to_anchor=(1.02, 0.5),
+                frameon=style.legend_frameon,
+                ncol=style.legend_ncol,
+                borderaxespad=0.0,
+            )
+            # Leave room on the right so legend isn't clipped
+            fig.tight_layout(rect=(0, 0, 0.85, 1))
+        else:
+            ax.legend(
+                handles=handles,
+                title=legend_title,
+                loc=style.legend_loc,
+                frameon=style.legend_frameon,
+                ncol=style.legend_ncol,
+            )
+            fig.tight_layout()
+    else:
+        fig.tight_layout()
 
     fig.tight_layout()
     return fig, ax
@@ -174,6 +196,8 @@ def scatter_plot_all_classes(
     s: float = 5.0,
     alpha: float = 0.25,
     linewidths: float = 0.0,
+    display_legend: bool = True,
+    legend_outside: bool = False,
     legend_title: Optional[str] = None,
     legend_loc: str = "lower left",
     legend_frameon: bool = False,
@@ -243,6 +267,8 @@ def scatter_plot_all_classes(
         s=s,
         alpha=alpha,
         linewidths=linewidths,
+        display_legend=display_legend,
+        legend_outside=legend_outside,
         legend_title=legend_title if legend_title is not None else subclass_col,
         legend_loc=legend_loc,
         legend_frameon=legend_frameon,
@@ -300,6 +326,8 @@ def scatter_plot_hierarchical_labels(
     s: float = 2.0,
     alpha: float = 0.2,
     linewidths: float = 0.0,
+    display_legend: bool = True,
+    legend_outside: bool = False,
     legend_title: str = "Class / Superclass",
     legend_loc: str = "lower left",
     legend_frameon: bool = False,
@@ -398,6 +426,8 @@ def scatter_plot_hierarchical_labels(
         s=s,
         alpha=alpha,
         linewidths=linewidths,
+        display_legend=display_legend,
+        legend_outside=legend_outside,
         legend_title=legend_title,
         legend_loc=legend_loc,
         legend_frameon=legend_frameon,
