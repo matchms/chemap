@@ -1,4 +1,3 @@
-import re
 from dataclasses import dataclass
 from typing import Any, Dict, List, Literal, Optional, Protocol, Sequence, Tuple, Union
 import numpy as np
@@ -128,7 +127,6 @@ def compute_fingerprints(
         - config.count True : List[Tuple[np.ndarray[int64], np.ndarray[float32]]] (sorted feature IDs + values)
     """
     _validate_config(config)
-    _quick_smiles_check(smiles)
 
     if _looks_like_rdkit_fpgen(fpgen):
         return _compute_rdkit(smiles, fpgen, config, show_progress=show_progress, n_jobs=n_jobs)
@@ -220,15 +218,6 @@ def _empty_unfolded_binary() -> np.ndarray:
 
 def _empty_unfolded_count() -> Tuple[np.ndarray, np.ndarray]:
     return np.array([], dtype=np.int64), np.array([], dtype=np.float32)
-
-
-def _quick_smiles_check(smiles_lst: Sequence[str]) -> None:
-    regexp = r"^([^J][0-9a-zA-Z@+\-\[\]\(\)\\\/%=#$,.~&!]*)$"
-    for s in smiles_lst:
-        if s is None:
-            raise ValueError(f"Invalid SMILES: {s}")
-        if not re.match(regexp, s):
-            raise ValueError(f"Invalid SMILES: {s}")
 
 
 # -----------------------------
