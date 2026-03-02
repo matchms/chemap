@@ -1,6 +1,6 @@
 [project]
 name = "chemap"
-version = "0.3.4"
+version = "0.3.5"
 description = "Library for computing molecular fingerprint based similarities as well as dimensionality reduction based chemical space visualizations. "
 authors = [
   { name="Florian Huber", email="florian.huber@hs-duesseldorf.de" },
