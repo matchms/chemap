@@ -39,7 +39,7 @@ This includes popular fingerprint types such as:
 - Atom pair fingerprints
 
 
-## Fingerprint computations II (implemtations in `chemap`)
+## Fingerprint computations II (implementations in `chemap`)
 Due to some existing limitations with present implementations, chemap also provides some fingerprint generator.
 Those allow to generate folded as well as unfolded fingerprints, each either as binary or count variant.
 
