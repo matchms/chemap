@@ -1,4 +1,5 @@
 from .chemap_base_fingerprint import ChemapBaseFingerprint
+from .custom_fingerprint import CustomFingerprint
 from .element_count_fp import ElementCountFingerprint
 from .lingo import LingoFingerprint
 from .map4 import MAP4FPGen
@@ -11,4 +12,5 @@ __all__ = [
     "LingoFingerprint",
     "MAP4FPGen",
     "MHFPEncoderLite",
+    "CustomFingerprint"
 ]
