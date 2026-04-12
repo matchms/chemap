@@ -112,7 +112,6 @@ def _validate_row(
 def _compute_df_and_order(
     fingerprints: Sequence[FingerprintInput],
     *,
-    consolidate_duplicates_within_rows: bool,
     sort_bits: bool,
 ) -> tuple[Dict[int, int], Optional[Dict[int, int]], int, Literal["count", "binary"]]:
     """
@@ -122,8 +121,6 @@ def _compute_df_and_order(
     ----------
     fingerprints
         Sequence of unfolded fingerprints.
-    consolidate_duplicates_within_rows
-        If True, multiple occurrences of the same bit within a row count once for DF.
     sort_bits
         If True, sort bits in the vocabulary; else preserve first-seen order.
     Returns:
@@ -260,7 +257,6 @@ def fingerprints_to_csr(
 
     df_dict, order, nnz_ub, kind = _compute_df_and_order(
         fingerprints,
-        consolidate_duplicates_within_rows=consolidate_duplicates_within_rows,
         sort_bits=sort_bits,
     )
 
