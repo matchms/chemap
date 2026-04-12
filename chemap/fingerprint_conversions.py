@@ -235,18 +235,84 @@ def fingerprints_to_csr(
     tf_transform: TFTransform = None,
 ) -> MatrixWithVocab:
     """
-    Case 1:
-      - Convert unfolded fingerprints to CSR.
-      - Supports count fingerprints: [(bits, counts), ...]
-      - Supports binary fingerprints:  [bits_array, ...]  (data becomes 1.0)
+    Convert unfolded molecular fingerprints into a CSR sparse matrix.
 
-    Occurrence filtering (min/max) uses document frequency: presence across fingerprints.
+    This function accepts either count fingerprints, given as ``(bits, counts)``
+    tuples, or binary fingerprints, given as arrays of bit identifiers. Each
+    unique retained bit becomes one column in the output matrix, and each input
+    fingerprint becomes one row.
+
+    For count fingerprints, matrix entries are the corresponding counts, optionally
+    transformed within each row using ``tf_transform``. For binary fingerprints,
+    retained entries are set to 1.
+
+    Vocabulary construction is dataset-level and based on document frequency (DF),
+    i.e. the number of fingerprints in which a bit occurs at least once. Optional
+    ``min_occurrence`` and ``max_occurrence`` thresholds are applied to this DF
+    before the matrix is built.
 
     Parameters
     ----------
+    fingerprints
+        Sequence of unfolded fingerprints. All entries must have the same form:
+        either count fingerprints as ``(bits, counts)`` tuples or binary
+        fingerprints as one-dimensional arrays of bit identifiers.
+    dtype
+        Data type of the matrix values.
+    sort_bits
+        If True, columns are ordered by ascending bit identifier. If False,
+        columns follow the order in which bits are first encountered in the
+        dataset.
+    sort_indices_within_rows
+        If True, sort column indices within each row of the CSR matrix.
+    consolidate_duplicates_within_rows
+        If True, repeated bit identifiers within a row are merged before values
+        are written to the matrix. For count fingerprints, duplicate counts are
+        summed before applying ``tf_transform``. For binary fingerprints, repeated
+        occurrences are reduced to a single presence.
+    return_bit_to_col
+        If True, include a ``bit_to_col`` mapping in the returned vocabulary.
+        This can be memory-intensive for very large vocabularies.
+    min_occurrence
+        Minimum document frequency required for a bit to be retained. Must be
+        ``None`` or an integer >= 1.
+    max_occurrence
+        Maximum document frequency allowed for a bit to be retained. May be
+        ``None``, an integer >= 1, or a float in ``(0, 1)`` interpreted as a
+        fraction of the number of rows.
     tf_transform
-        Optional transform applied to counts *within each row* (count fingerprints only),
-        e.g. `np.log1p`. Applied after optional duplicate consolidation.
+        Optional transformation applied to count values within each row after
+        optional duplicate consolidation. Examples include ``np.log1p`` or
+        sublinear term-frequency transforms. Ignored for binary fingerprints.
+
+    Returns
+    -------
+    MatrixWithVocab
+        Object containing the CSR matrix and the corresponding vocabulary.
+        ``idf`` is ``None`` for this function.
+
+    Notes
+    -----
+    Document frequency is always computed as row-wise presence, not as the total
+    number of occurrences across the dataset.
+
+    Examples
+    --------
+    Count fingerprints::
+
+        fps = [
+            (np.array([2, 5, 5]), np.array([1, 2, 3])),
+            (np.array([2, 9]),    np.array([4, 1])),
+        ]
+        out = fingerprints_to_csr(fps, tf_transform=np.log1p)
+
+    Binary fingerprints::
+
+        fps = [
+            np.array([2, 5, 9]),
+            np.array([2, 7]),
+        ]
+        out = fingerprints_to_csr(fps)
     """
     n_rows = len(fingerprints)
     if n_rows == 0:
@@ -412,8 +478,22 @@ def fingerprints_to_csr(
 
 def idf_normalized(df: np.ndarray, N: int) -> np.ndarray:
     """
-    Normalized IDF in [0, 1] using:
-        idf = log(N / df) / log(N / 1)
+    Compute normalized inverse document frequency values in the range [0, 1].
+
+    The normalization is defined as::
+
+        idf(df) = log(N / df) / log(N)
+
+    where ``N`` is the number of rows and ``df`` is the document frequency of
+    each retained bit. Bits present in every row receive an IDF of 0, while bits
+    present in exactly one row receive the maximum value of 1.
+
+    Parameters
+    ----------
+    df
+        One-dimensional array of document frequencies for the retained columns.
+    N
+        Total number of rows (fingerprints) in the dataset.
     """
     df = np.asarray(df, dtype=np.float64)
     if N < 1:
@@ -442,11 +522,44 @@ def fingerprints_to_tfidf(
     tf_transform: TFTransform = None,
 ) -> MatrixWithVocab:
     """
-    Case 2:
-      - Count fingerprints -> TF-IDF (TF = counts, optionally transformed; then multiplied by normalized IDF)
-      - Binary fingerprints -> IDF-only (data starts as 1.0 then multiplied by normalized IDF)
+    Convert unfolded fingerprints into a TF-IDF- or IDF-weighted CSR matrix.
 
-    IDF is computed on the *filtered vocabulary* (after min/max occurrence filtering).
+    This function first builds the same filtered sparse representation as
+    :func:`fingerprints_to_csr`, then multiplies each retained column by its
+    normalized inverse document frequency (IDF).
+
+    For count fingerprints, matrix entries are interpreted as term frequencies
+    (TF), optionally transformed within each row using ``tf_transform``, and then
+    multiplied by IDF. For binary fingerprints, each retained entry starts as 1
+    and is then weighted only by IDF.
+
+    Document frequency thresholds are applied before IDF is computed, so the
+    returned IDF vector corresponds exactly to the retained vocabulary.
+
+    Parameters
+    ----------
+    fingerprints
+        Sequence of unfolded fingerprints, either all count fingerprints or all
+        binary fingerprints.
+    dtype
+        Data type of the matrix values.
+    sort_bits
+        If True, columns are ordered by ascending bit identifier. If False,
+        columns follow first-seen order in the dataset.
+    sort_indices_within_rows
+        If True, sort column indices within each row of the CSR matrix.
+    consolidate_duplicates_within_rows
+        If True, repeated bit identifiers within a row are merged before TF
+        values are determined.
+    return_bit_to_col
+        If True, include a bit-to-column mapping in the returned vocabulary.
+    min_occurrence
+        Minimum document frequency required for a bit to be retained.
+    max_occurrence
+        Maximum document frequency allowed for a bit to be retained.
+    tf_transform
+        Optional transformation applied to count values within each row before
+        IDF weighting. Ignored for binary fingerprints.
     """
     out = fingerprints_to_csr(
         fingerprints,
@@ -490,9 +603,13 @@ def fold_csr_mod(
     Parameters
     ----------
     X
-        Input CSR matrix (unfolded).
+        Input matrix in CSR format.
     n_folded_features
-        Target dimensionality after folding.
+        Number of columns in the folded output matrix.
+    sort_indices
+        If True, sort column indices within each row of the output matrix.
+    sum_duplicates
+        If True, merge collisions created by folding by summing duplicate entries.
     """
     if not sp.isspmatrix_csr(X):
         raise TypeError("X must be a scipy.sparse.csr_matrix.")
@@ -529,8 +646,46 @@ def fingerprints_to_csr_folded(
     tf_transform: TFTransform = None,
 ) -> MatrixWithVocab:
     """
-    Case 3 (from Case 1):
-      Convert to CSR (with optional min/max filtering) and then fold columns.
+    Convert unfolded fingerprints to a sparse matrix and then fold the feature
+    space using modulo hashing.
+
+    This is a two-step operation:
+
+    1. Build a filtered unfolded CSR matrix from the input fingerprints.
+    2. Fold its columns into ``n_folded_features`` dimensions using
+       :func:`fold_csr_mod`.
+
+    The vocabulary stored in the returned object always describes the retained
+    unfolded features before hashing-based folding. The matrix itself is the
+    folded representation.
+
+    Parameters
+    ----------
+    fingerprints
+        Sequence of unfolded count or binary fingerprints.
+    n_folded_features
+        Number of columns in the folded output matrix.
+    dtype
+        Data type of the matrix values.
+    sort_bits
+        Controls how the unfolded vocabulary is ordered before folding.
+    sort_indices_within_rows
+        If True, sort column indices within each row before returning the folded
+        matrix.
+    consolidate_duplicates_within_rows
+        If True, merge repeated bit identifiers within a row before writing the
+        unfolded matrix.
+    return_bit_to_col
+        If True, include a bit-to-column mapping for the unfolded vocabulary.
+    min_occurrence
+        Minimum document frequency required for a bit to be retained before
+        folding.
+    max_occurrence
+        Maximum document frequency allowed for a bit to be retained before
+        folding.
+    tf_transform
+        Optional transformation applied to count values before folding. Ignored
+        for binary fingerprints.
     """
     out = fingerprints_to_csr(
         fingerprints,
@@ -561,8 +716,45 @@ def fingerprints_to_tfidf_folded(
     tf_transform: TFTransform = None,
 ) -> MatrixWithVocab:
     """
-    Case 3 (from Case 2):
-      Convert to TF-IDF/IDF (with optional min/max filtering) and then fold columns.
+    Convert unfolded fingerprints to a TF-IDF- or IDF-weighted sparse matrix and
+    then fold the feature space using modulo hashing.
+
+    This function first constructs a filtered unfolded representation, computes
+    normalized IDF weights for the retained vocabulary, applies those weights to
+    the matrix values, and finally folds the weighted matrix into
+    ``n_folded_features`` dimensions using modulo hashing.
+
+    The returned vocabulary and IDF vector always refer to the retained unfolded
+    features before folding. The matrix itself is the folded weighted
+    representation.
+
+    Parameters
+    ----------
+    fingerprints
+        Sequence of unfolded count or binary fingerprints.
+    n_folded_features
+        Number of columns in the folded output matrix.
+    dtype
+        Data type of the matrix values.
+    sort_bits
+        Controls how the unfolded vocabulary is ordered before folding.
+    sort_indices_within_rows
+        If True, sort column indices within each row before returning the folded
+        matrix.
+    consolidate_duplicates_within_rows
+        If True, merge repeated bit identifiers within a row before TF/IDF
+        weighting is applied.
+    return_bit_to_col
+        If True, include a bit-to-column mapping for the unfolded vocabulary.
+    min_occurrence
+        Minimum document frequency required for a bit to be retained before
+        weighting and folding.
+    max_occurrence
+        Maximum document frequency allowed for a bit to be retained before
+        weighting and folding.
+    tf_transform
+        Optional transformation applied to count values before IDF weighting.
+        Ignored for binary fingerprints.
     """
     out = fingerprints_to_tfidf(
         fingerprints,
