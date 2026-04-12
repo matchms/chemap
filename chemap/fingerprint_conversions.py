@@ -575,6 +575,10 @@ def fingerprints_to_tfidf(
 
     X = out.X.copy()
     N = X.shape[0]
+
+    if N == 0:
+        return MatrixWithVocab(X=X, vocab=out.vocab, idf=None)
+
     idf = idf_normalized(out.vocab.df, N)
 
     # Apply IDF per nonzero without building a diagonal matrix
@@ -769,3 +773,286 @@ def fingerprints_to_tfidf_folded(
     )
     X_folded = fold_csr_mod(out.X, n_folded_features)
     return MatrixWithVocab(X=X_folded, vocab=out.vocab, idf=out.idf)
+
+
+def _restrict_vocab_top_k_frequency(
+    vocab: Vocabulary,
+    *,
+    n_rows: int,
+    max_features: int,
+    exclude_constant_bits: bool = True,
+    return_bit_to_col: bool = False,
+) -> Vocabulary:
+    """
+    Keep the `max_features` most frequent bits from an existing vocabulary.
+
+    Bits are ranked by descending document frequency (DF). Ties are resolved by
+    the current column order of `vocab`, so ordering remains deterministic.
+
+    Parameters
+    ----------
+    vocab
+        Vocabulary describing the unfolded feature space.
+    n_rows
+        Number of fingerprints in the reference dataset used to compute DF.
+    max_features
+        Number of features to retain.
+    exclude_constant_bits
+        If True, remove bits with `df == n_rows` before ranking. Such bits are
+        present in every fingerprint and therefore do not contribute to
+        discrimination within this dataset.
+    return_bit_to_col
+        If True, build the `bit_to_col` mapping for the reduced vocabulary.
+
+    Returns
+    -------
+    Vocabulary
+        Reduced vocabulary containing at most `max_features` bits.
+    """
+    if max_features < 1:
+        raise ValueError("max_features must be >= 1.")
+
+    col_bits = vocab.col_bits
+    df = vocab.df
+
+    if col_bits.size == 0:
+        return Vocabulary(
+            col_bits=np.empty((0,), dtype=np.int64),
+            df=np.empty((0,), dtype=np.int32),
+            bit_to_col={} if return_bit_to_col else None,
+        )
+
+    keep = np.ones(df.shape[0], dtype=bool)
+    if exclude_constant_bits:
+        keep &= (df < n_rows)
+
+    idx = np.nonzero(keep)[0]
+    if idx.size == 0:
+        return Vocabulary(
+            col_bits=np.empty((0,), dtype=np.int64),
+            df=np.empty((0,), dtype=np.int32),
+            bit_to_col={} if return_bit_to_col else None,
+        )
+
+    # Stable sort: descending DF, ties keep existing order
+    order = np.argsort(-df[idx], kind="mergesort")
+    selected = idx[order[:max_features]]
+
+    # Preserve the existing vocabulary order in the returned representation
+    selected.sort()
+
+    new_bits = col_bits[selected]
+    new_df = df[selected]
+
+    bit_to_col = None
+    if return_bit_to_col:
+        bit_to_col = {int(b): int(j) for j, b in enumerate(new_bits)}
+
+    return Vocabulary(col_bits=new_bits, df=new_df, bit_to_col=bit_to_col)
+
+
+def _fingerprints_to_csr_with_vocab(
+    fingerprints: Sequence[FingerprintInput],
+    vocab: Vocabulary,
+    *,
+    dtype: Union[np.dtype, type] = np.float32,
+    sort_indices_within_rows: bool = True,
+    consolidate_duplicates_within_rows: bool = True,
+    tf_transform: TFTransform = None,
+) -> sp.csr_matrix:
+    """
+    Build a CSR matrix from fingerprints using a fixed vocabulary.
+
+    Only bits present in `vocab` are retained. Column positions are taken
+    directly from `vocab.bit_to_col` if available, otherwise a mapping is built
+    on the fly.
+    """
+    n_rows = len(fingerprints)
+    n_cols = int(vocab.col_bits.size)
+
+    if n_rows == 0 or n_cols == 0:
+        return sp.csr_matrix((n_rows, n_cols), dtype=dtype)
+
+    kind = _infer_kind(fingerprints[0])
+    ind_dtype = np.int32 if n_cols < np.iinfo(np.int32).max else np.int64
+
+    nnz_ub = 0
+    for i, row in enumerate(fingerprints):
+        row_kind = _infer_kind(row)
+        if row_kind != kind:
+            raise TypeError(
+                "All fingerprints must have the same form: either (bits, counts) "
+                "tuples or bit-only arrays."
+            )
+        bits_i64, _ = _validate_row(row, i, kind)
+        nnz_ub += int(bits_i64.size)
+
+    data = np.empty((nnz_ub,), dtype=dtype)
+    indices = np.empty((nnz_ub,), dtype=ind_dtype)
+    indptr = np.empty((n_rows + 1,), dtype=np.int64)
+    indptr[0] = 0
+
+    mapping = vocab.bit_to_col or {int(b): int(j) for j, b in enumerate(vocab.col_bits)}
+
+    pos = 0
+    for i, row in enumerate(fingerprints):
+        bits_i64, counts = _validate_row(row, i, kind)
+
+        if bits_i64.size == 0:
+            indptr[i + 1] = pos
+            continue
+
+        if consolidate_duplicates_within_rows:
+            uniq_bits, inv = np.unique(bits_i64, return_inverse=True)
+            if kind == "count":
+                summed = np.bincount(inv, weights=counts.astype(np.float64, copy=False))
+                vals = summed.astype(dtype, copy=False)
+                if tf_transform is not None:
+                    vals = np.asarray(tf_transform(vals), dtype=dtype)
+            else:
+                vals = np.ones(uniq_bits.shape[0], dtype=dtype)
+        else:
+            uniq_bits = bits_i64
+            if kind == "count":
+                vals = counts.astype(dtype, copy=False)
+                if tf_transform is not None:
+                    vals = np.asarray(tf_transform(vals), dtype=dtype)
+            else:
+                vals = np.ones(bits_i64.shape[0], dtype=dtype)
+
+        cols_tmp = []
+        vals_tmp = []
+        for t in range(int(uniq_bits.size)):
+            j = mapping.get(int(uniq_bits[t]), -1)
+            if j != -1:
+                cols_tmp.append(j)
+                vals_tmp.append(vals[t])
+
+        if cols_tmp:
+            cols = np.asarray(cols_tmp, dtype=ind_dtype)
+            vals = np.asarray(vals_tmp, dtype=dtype)
+
+            if sort_indices_within_rows and cols.size > 1:
+                order = np.argsort(cols, kind="mergesort")
+                cols = cols[order]
+                vals = vals[order]
+
+            k = int(cols.size)
+            indices[pos:pos + k] = cols
+            data[pos:pos + k] = vals
+            pos += k
+
+        indptr[i + 1] = pos
+
+    X = sp.csr_matrix((data[:pos], indices[:pos], indptr), shape=(n_rows, n_cols), dtype=dtype)
+    X.sum_duplicates()
+    if sort_indices_within_rows:
+        X.sort_indices()
+    return X
+
+
+def fingerprints_to_csr_frequency_folded(
+    fingerprints: Sequence[FingerprintInput],
+    *,
+    n_frequency_features: int,
+    dtype: Union[np.dtype, type] = np.float32,
+    sort_bits: bool = True,
+    sort_indices_within_rows: bool = True,
+    consolidate_duplicates_within_rows: bool = True,
+    return_bit_to_col: bool = False,
+    min_occurrence: Optional[int] = None,
+    max_occurrence: Optional[Union[int, float]] = None,
+    tf_transform: TFTransform = None,
+    exclude_constant_bits: bool = True,
+) -> MatrixWithVocab:
+    """
+    Build a sparse fingerprint matrix using only the most frequent unfolded bits.
+
+    This function first computes the unfolded vocabulary and document frequencies
+    on the input dataset, optionally applies occurrence-based filtering, and then
+    retains only the `n_frequency_features` most frequent remaining bits.
+
+    Unlike modulo hashing, this representation does not introduce collisions.
+    Instead, dimensionality is reduced by selecting a fixed number of high-frequency
+    bits from the reference dataset.
+
+    Parameters
+    ----------
+    fingerprints
+        Sequence of unfolded count or binary fingerprints.
+    n_frequency_features
+        Number of frequent bits to retain.
+    dtype
+        Data type of the matrix values.
+    sort_bits
+        Controls the initial ordering of the unfolded vocabulary before frequency
+        ranking is applied.
+    sort_indices_within_rows
+        If True, sort column indices within each row of the output matrix.
+    consolidate_duplicates_within_rows
+        If True, merge repeated bit identifiers within each row before values are
+        written to the matrix.
+    return_bit_to_col
+        If True, include a bit-to-column mapping in the returned vocabulary.
+    min_occurrence
+        Minimum document frequency required for a bit to be considered.
+    max_occurrence
+        Maximum document frequency allowed for a bit to be considered.
+    tf_transform
+        Optional transformation applied to count values within each row. Ignored
+        for binary fingerprints.
+    exclude_constant_bits
+        If True, exclude bits present in every fingerprint from frequency-based
+        selection. Such bits carry no discriminative information within the
+        reference dataset.
+
+    Returns
+    -------
+    MatrixWithVocab
+        Object containing the reduced CSR matrix and the selected vocabulary.
+        `idf` is `None` for this function.
+    """
+    n_rows = len(fingerprints)
+    if n_rows == 0:
+        X = sp.csr_matrix((0, 0), dtype=dtype)
+        vocab = Vocabulary(
+            col_bits=np.empty((0,), dtype=np.int64),
+            df=np.empty((0,), dtype=np.int32),
+            bit_to_col={} if return_bit_to_col else None,
+        )
+        return MatrixWithVocab(X=X, vocab=vocab, idf=None)
+
+    base = fingerprints_to_csr(
+        fingerprints,
+        dtype=dtype,
+        sort_bits=sort_bits,
+        sort_indices_within_rows=sort_indices_within_rows,
+        consolidate_duplicates_within_rows=consolidate_duplicates_within_rows,
+        return_bit_to_col=True,
+        min_occurrence=min_occurrence,
+        max_occurrence=max_occurrence,
+        tf_transform=None,  # build vocab first; apply tf later during rebuild
+    )
+
+    reduced_vocab = _restrict_vocab_top_k_frequency(
+        base.vocab,
+        n_rows=n_rows,
+        max_features=n_frequency_features,
+        exclude_constant_bits=exclude_constant_bits,
+        return_bit_to_col=return_bit_to_col,
+    )
+
+    X = _fingerprints_to_csr_with_vocab(
+        fingerprints,
+        Vocabulary(
+            col_bits=reduced_vocab.col_bits,
+            df=reduced_vocab.df,
+            bit_to_col={int(b): int(j) for j, b in enumerate(reduced_vocab.col_bits)},
+        ),
+        dtype=dtype,
+        sort_indices_within_rows=sort_indices_within_rows,
+        consolidate_duplicates_within_rows=consolidate_duplicates_within_rows,
+        tf_transform=tf_transform,
+    )
+
+    return MatrixWithVocab(X=X, vocab=reduced_vocab, idf=None)
