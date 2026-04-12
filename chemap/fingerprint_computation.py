@@ -529,6 +529,44 @@ def _clone_transformer_with_params(fpgen: SklearnTransformer, updates: Dict[str,
     return fpgen.__class__(**params)  # type: ignore[arg-type]
 
 
+def _resolve_skfp_variant(
+    fpgen: SklearnTransformer,
+    *,
+    want_folded: bool,
+    want_count: bool,
+) -> Optional[str]:
+    """
+    Return the appropriate value for the transformer's `variant` parameter,
+    or None if no variant update is needed / supported.
+    """
+    params = fpgen.get_params(deep=False)
+
+    if "variant" not in params:
+        return None
+
+    cls_name = fpgen.__class__.__name__
+    current = params.get("variant")
+
+    # Pharmacophore-style API
+    if cls_name == "PharmacophoreFingerprint":
+        return "folded" if want_folded else "raw_bits"
+
+    # MAPFingerprint-style API
+    if cls_name == "MAPFingerprint":
+        if want_folded:
+            return "count" if want_count else "binary"
+        return "minhash"
+
+    # MHFP-style API
+    if cls_name == "MHFPFingerprint":
+        if want_folded:
+            return "count" if want_count else "bit"
+        return "raw_hashes"
+
+    # Generic fallback: leave untouched
+    return current
+
+
 def _skfp_configure_output(
     fpgen: SklearnTransformer,
     cfg: FingerprintConfig,
@@ -568,15 +606,21 @@ def _skfp_configure_output(
             # We don't force sparse; unfolded returns lists anyway.
             return _clone_transformer_with_params(fpgen, updates) if updates else fpgen
 
-        # classic scikit-fingerprints route: needs variant='raw_bits'
-        if "variant" not in params:
+        desired_variant = _resolve_skfp_variant(
+            fpgen,
+            want_folded=False,
+            want_count=cfg.count,
+        )
+
+        if desired_variant is None:
             raise NotImplementedError(
                 "Requested folded=False (unfolded), but this transformer does not support "
-                "either chemap-style `folded` switching or an skfp-style `variant='raw_bits'`."
+                "either chemap-style `folded` switching or a recognized skfp `variant` mode "
+                "for unfolded output."
             )
 
-        if params.get("variant") != "raw_bits":
-            updates["variant"] = "raw_bits"
+        if params.get("variant") != desired_variant:
+            updates["variant"] = desired_variant
 
         return _clone_transformer_with_params(fpgen, updates) if updates else fpgen
 
@@ -587,9 +631,14 @@ def _skfp_configure_output(
         if params.get("folded") is not True:
             updates["folded"] = True
 
-    # If it's classic skfp and currently set to raw_bits, restore folded variant
-    if "variant" in params and params.get("variant") == "raw_bits":
-        updates["variant"] = "folded"
+    else:
+        desired_variant = _resolve_skfp_variant(
+            fpgen,
+            want_folded=True,
+            want_count=cfg.count,
+        )
+        if desired_variant is not None and params.get("variant") != desired_variant:
+            updates["variant"] = desired_variant
 
     # Prefer CSR if requested and supported
     if "sparse" in params:
