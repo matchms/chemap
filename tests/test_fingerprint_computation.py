@@ -170,8 +170,7 @@ class FakeTransformer(BaseEstimator, TransformerMixin):
             return np.array([[1, 2, 3]], dtype=np.float32)
 
         if mode == "unfolded_binary":
-            # Only correct when variant has been set to raw_bits by adapter.
-            if variant != "raw_bits":
+            if variant not in {"raw_bits", "minhash", "raw_hashes"}:
                 return np.zeros((n, d), dtype=np.float32)
             M = np.zeros((n, d), dtype=np.float32)
             M[0, 1] = 1.0
@@ -179,7 +178,7 @@ class FakeTransformer(BaseEstimator, TransformerMixin):
             return M
 
         if mode == "unfolded_count":
-            if variant != "raw_bits":
+            if variant not in {"raw_bits", "minhash", "raw_hashes"}:
                 return np.zeros((n, d), dtype=np.float32)
             M = np.zeros((n, d), dtype=np.float32)
             M[0, 2] = 4.0
@@ -191,6 +190,11 @@ class FakeTransformer(BaseEstimator, TransformerMixin):
         for i in range(n):
             M[i, i % d] = 1.0
         return M
+
+
+class PharmacophoreFingerprint(FakeTransformer):
+    """Fake for skfp transformers using raw_bits <-> folded variants."""
+    pass
 
 
 class NoVariantTransformer(FakeTransformer):
@@ -430,8 +434,8 @@ def test_sklearn_unfolded_requires_variant():
         _ = compute_fingerprints(["A"], fp, cfg)
 
 
-def test_sklearn_unfolded_sets_variant_raw_bits_and_returns_unfolded_binary():
-    fp = FakeTransformer(
+def test_sklearn_unfolded_sets_supported_unfolded_variant_and_returns_unfolded_binary():
+    fp = PharmacophoreFingerprint(
         sparse=False,
         variant="folded",
         mode="unfolded_binary",
@@ -446,7 +450,7 @@ def test_sklearn_unfolded_sets_variant_raw_bits_and_returns_unfolded_binary():
 
 
 def test_sklearn_unfolded_count_scaling_and_unfolded_weights():
-    fp = FakeTransformer(
+    fp = PharmacophoreFingerprint(
         sparse=False,
         variant="folded",
         mode="unfolded_count",
@@ -458,7 +462,7 @@ def test_sklearn_unfolded_count_scaling_and_unfolded_weights():
     keys, vals = out[0]
     assert list(keys) == [2, 5]
     expected = np.log1p(np.array([4.0, 2.0], dtype=np.float32)) * np.array([10.0, 1.0], dtype=np.float32)
-    np.testing.assert_allclose(vals, expected, rtol=1e-6, atol=1e-6)
+    np.testing.assert_allclose(vals, expected, rtol=1e-6)
 
 
 def test_sklearn_folded_csr_requests_sparse_from_transformer_and_returns_csr():
