@@ -798,9 +798,11 @@ def _restrict_vocab_top_k_frequency(
     max_features
         Number of features to retain.
     exclude_constant_bits
-        If True, remove bits with `df == n_rows` before ranking. Such bits are
-        present in every fingerprint and therefore do not contribute to
-        discrimination within this dataset.
+        If True, remove bits with `df == n_rows` before ranking, i.e. bits that are
+        present in every fingerprint at least once. For binary fingerprints, such
+        bits are constant-presence features and therefore non-discriminative within
+        the dataset. For count fingerprints, this filter is based only on presence,
+        so retained or excluded bits may still vary in their counts across samples.
     return_bit_to_col
         If True, build the `bit_to_col` mapping for the reduced vocabulary.
 
