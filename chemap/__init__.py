@@ -3,8 +3,8 @@ from .fingerprint_computation import FingerprintConfig, compute_fingerprints, mo
 
 
 __all__ = [
+    "DatasetLoader",
     "FingerprintConfig",
     "compute_fingerprints",
-    "DatasetLoader",
     "mol_from_smiles",
 ]

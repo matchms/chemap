@@ -39,7 +39,7 @@ def heatmap_comparison(similarities1, similarities2, label1, label2, bins=50,
     
     # Plot the heatmap using imshow with a logarithmic color scale
     im = ax.imshow(
-        hist.T, origin='lower', aspect='equal',
+        hist.T, origin="lower", aspect="equal",
         extent=[x_edges[0], x_edges[-1], y_edges[0], y_edges[-1]],
         cmap=colormap, norm=LogNorm(vmin=1, vmax=np.max(hist))
     )
@@ -132,7 +132,7 @@ def percentile_to_uniform(p, edges):
       within bin i in [0..1].
     """
     # Find the bin index where p belongs
-    i = np.searchsorted(edges, p, side='right') - 1
+    i = np.searchsorted(edges, p, side="right") - 1
     # Clamp i to [0, len(edges)-2]
     i = max(0, min(i, len(edges) - 2))
     
@@ -191,8 +191,8 @@ def heatmap_comparison_scaled_bins(similarities1, similarities2,
     # -------------------------------------------------------------------------
     im = ax.imshow(
         hist.T,
-        origin='lower',
-        aspect='equal',
+        origin="lower",
+        aspect="equal",
         extent=[0, 1, 0, 1],
         cmap=colormap,
         norm=LogNorm(vmin=1, vmax=hist.max() if hist.max() > 0 else 1)
@@ -288,7 +288,7 @@ def heatmap_comparison_scaled_bins(similarities1, similarities2,
     ax.set_yticklabels([f"{p}%" for p in minor_percentiles], minor=True)
     
     # Optionally turn on grid lines
-    ax.grid(which='major', color='lightgray', linestyle='-', linewidth=0.8, alpha=0.9)
+    ax.grid(which="major", color="lightgray", linestyle="-", linewidth=0.8, alpha=0.9)
     #ax.grid(which='minor', color='gray', linestyle='-', linewidth=0.5, alpha=0.3)
     
     # Labels

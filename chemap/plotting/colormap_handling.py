@@ -1,6 +1,7 @@
 import re
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple, Union
+from typing import Any
 import matplotlib as mpl
 import matplotlib.colors as mcolors
 import numpy as np
@@ -33,10 +34,10 @@ class LabelMapConfig:
     sep: str = "->"
 
     # If provided, keep only top_k_classes as explicit labels in huge superclasses
-    top_k_classes: Optional[int] = None
+    top_k_classes: int | None = None
 
 
-def _normalize_label_value(x: Any) -> Optional[str]:
+def _normalize_label_value(x: Any) -> str | None:
     """Normalize a label cell value.
 
     Returns None for missing / unknown-like values, else a stripped string.
@@ -54,8 +55,8 @@ def _normalize_label_value(x: Any) -> Optional[str]:
 def build_hier_label_map(
     labels: pd.DataFrame,
     *,
-    config: LabelMapConfig = LabelMapConfig(),
-) -> Tuple[Dict[str, str], Dict[str, Dict[str, int | str]]]:
+    config: LabelMapConfig | None = None,
+) -> tuple[dict[str, str], dict[str, dict[str, int | str]]]:
     """Build a mapping from fine-grained class labels to display labels.
 
     Parameters
@@ -85,6 +86,9 @@ def build_hier_label_map(
     """
     if not isinstance(labels, pd.DataFrame):
         raise TypeError("labels must be a pandas DataFrame")
+
+    if config is None:
+        config = LabelMapConfig()
 
     missing_cols = [c for c in (config.superclass_col, config.class_col) if c not in labels.columns]
     if missing_cols:
@@ -118,8 +122,8 @@ def build_hier_label_map(
         .astype(int)
     )
 
-    class_to_label: Dict[str, str] = {}
-    superclass_info: Dict[str, Dict[str, int | str]] = {}
+    class_to_label: dict[str, str] = {}
+    superclass_info: dict[str, dict[str, int | str]] = {}
 
     for superclass, sc_count in superclass_counts.items():
         # Series indexed by class for this superclass
@@ -156,7 +160,7 @@ def build_hier_label_map(
         superclass_info[str(superclass)] = {
             "count": int(sc_count),
             "branch": branch,
-            "n_classes": int(len(cls_counts)),
+            "n_classes": len(cls_counts),
         }
 
     return class_to_label, superclass_info
@@ -181,11 +185,11 @@ class PaletteConfig:
     child_lighten_min: float = 0.15
     child_lighten_max: float = 0.65
 
-    neutral_rare: Tuple[float, float, float] = (0.6, 0.6, 0.6)
-    neutral_other: Tuple[float, float, float] = (0.35, 0.35, 0.35)
+    neutral_rare: tuple[float, float, float] = (0.6, 0.6, 0.6)
+    neutral_other: tuple[float, float, float] = (0.35, 0.35, 0.35)
 
 
-_SUBLABEL_RE_CACHE: Dict[str, re.Pattern[str]] = {}
+_SUBLABEL_RE_CACHE: dict[str, re.Pattern[str]] = {}
 
 
 def _get_sub_re(sep: str) -> re.Pattern[str]:
@@ -196,21 +200,21 @@ def _get_sub_re(sep: str) -> re.Pattern[str]:
     return pat
 
 
-def _lighten_rgb(rgb: Tuple[float, float, float], amount: float) -> Tuple[float, float, float]:
+def _lighten_rgb(rgb: tuple[float, float, float], amount: float) -> tuple[float, float, float]:
     """Blend `rgb` towards white by `amount` in [0, 1]."""
     amount = float(np.clip(amount, 0.0, 1.0))
     r, g, b = rgb
     return (r + (1.0 - r) * amount, g + (1.0 - g) * amount, b + (1.0 - b) * amount)
 
 
-def _get_cmap(cmap: Union[str, mpl.colors.Colormap]) -> mpl.colors.Colormap:
+def _get_cmap(cmap: str | mpl.colors.Colormap) -> mpl.colors.Colormap:
     """Matplotlib 3.7+ safe colormap retrieval."""
     if isinstance(cmap, str):
         return mpl.colormaps.get_cmap(cmap)
     return cmap
 
 
-def _distinct_base_colors(n: int, cmap_name: str) -> list[Tuple[float, float, float]]:
+def _distinct_base_colors(n: int, cmap_name: str) -> list[tuple[float, float, float]]:
     """Get n distinct colors from a matplotlib colormap, as RGB tuples.
 
     Uses the non-deprecated Matplotlib colormap registry API.
@@ -225,8 +229,8 @@ def _distinct_base_colors(n: int, cmap_name: str) -> list[Tuple[float, float, fl
 def make_hier_palette(
     display_labels: Iterable[Any],
     *,
-    config: PaletteConfig = PaletteConfig(),
-) -> Dict[str, Tuple[float, float, float]]:
+    config: PaletteConfig | None = None,
+) -> dict[str, tuple[float, float, float]]:
     """Create a hierarchical color palette for plot-ready display labels.
 
     Parameters
@@ -252,6 +256,9 @@ def make_hier_palette(
     - "...->other" gets `config.neutral_other`.
     - `config.rare_label` gets `config.neutral_rare`.
     """
+    if config is None:
+        config = PaletteConfig()
+
     # Normalize, drop NA, preserve uniqueness with stable ordering
     s = pd.Series(list(display_labels))
     s = s[~s.isna()].map(lambda x: str(x))
@@ -264,7 +271,7 @@ def make_hier_palette(
 
     sub_re = _get_sub_re(config.sep)
 
-    super_to_children: Dict[str, list[str]] = {}
+    super_to_children: dict[str, list[str]] = {}
     pure_super: set[str] = set()
 
     for lab in unique_labels:
@@ -279,9 +286,9 @@ def make_hier_palette(
 
     base_supers = sorted(pure_super | set(super_to_children.keys()))
     base_colors = _distinct_base_colors(len(base_supers), config.base_cmap)
-    super_to_base: Dict[str, Tuple[float, float, float]] = dict(zip(base_supers, base_colors, strict=True))
+    super_to_base: dict[str, tuple[float, float, float]] = dict(zip(base_supers, base_colors, strict=True))
 
-    label_to_color: Dict[str, Tuple[float, float, float]] = {}
+    label_to_color: dict[str, tuple[float, float, float]] = {}
 
     # Pure superclass colors
     for sup in pure_super:
@@ -364,11 +371,11 @@ class PresentPairsConfig:
     subclass_col: str = "Subclass"
 
     # Optional explicit global ordering for classes.
-    class_order: Optional[Sequence[str]] = None
+    class_order: Sequence[str] | None = None
 
     # Optional ordering for subclasses within a class:
     # { "Lipids": ["Fatty acids", "Steroids", ...], "Alkaloids": [...], ... }
-    subclass_order_within_class: Optional[Mapping[str, Sequence[str]]] = None
+    subclass_order_within_class: Mapping[str, Sequence[str]] | None = None
 
     # If True, ensure class/subclass values are normalized by stripping whitespace.
     strip: bool = True
@@ -390,7 +397,7 @@ def _normalize_for_sorting(x: Any, *, strip: bool = True) -> str:
 def sorted_present_pairs(
     data_plot: pd.DataFrame,
     *,
-    config: PresentPairsConfig = PresentPairsConfig(),
+    config: PresentPairsConfig | None = None,
 ) -> pd.DataFrame:
     """Return a sorted DataFrame of unique (Class, Subclass) pairs present in `data_plot`.
 
@@ -423,6 +430,9 @@ def sorted_present_pairs(
     """
     if not isinstance(data_plot, pd.DataFrame):
         raise TypeError("data_plot must be a pandas DataFrame")
+
+    if config is None:
+        config = PresentPairsConfig()
 
     missing_cols = [c for c in (config.class_col, config.subclass_col) if c not in data_plot.columns]
     if missing_cols:
@@ -462,11 +472,11 @@ def sorted_present_pairs(
         order_map = config.subclass_order_within_class
 
         # Precompute index maps for O(1) lookup
-        index_maps: Dict[str, Dict[str, int]] = {}
+        index_maps: dict[str, dict[str, int]] = {}
         for cls, order in order_map.items():
             index_maps[str(cls)] = {str(lbl): i for i, lbl in enumerate(order)}
 
-        def _sub_key(row: pd.Series) -> Tuple[int, Any]:
+        def _sub_key(row: pd.Series) -> tuple[int, Any]:
             cls = row[config.class_col]
             sub = row[config.subclass_col]
             cls_s = "" if pd.isna(cls) else str(cls)
@@ -499,7 +509,7 @@ def sorted_present_pairs(
 def palette_from_cmap(
     labels: Sequence[Any],
     cmap: str = "viridis",
-) -> Dict[str, Tuple[float, float, float] | Tuple[float, float, float, float]]:
+) -> dict[str, tuple[float, float, float] | tuple[float, float, float, float]]:
     """Evenly distribute labels along a colormap.
 
     Parameters
@@ -521,7 +531,7 @@ def palette_from_cmap(
         return {}
 
     positions = np.linspace(0.0, 1.0, n) if n > 1 else np.array([0.5])
-    return {lbl: cmap(pos) for lbl, pos in zip(labels, positions)}
+    return {lbl: cmap(pos) for lbl, pos in zip(labels, positions, strict=True)}
 
 
 def build_selected_label_column(
@@ -529,8 +539,8 @@ def build_selected_label_column(
     *,
     class_col: str,
     subclass_col: str,
-    selected_classes: Optional[Sequence[Any]] = None,
-    selected_subclasses: Optional[Sequence[Any]] = None,
+    selected_classes: Sequence[Any] | None = None,
+    selected_subclasses: Sequence[Any] | None = None,
     other_label: str = "other",
 ) -> pd.Series:
     """Return a Series of labels where only selected classes/subclasses keep their name, else 'other'."""
@@ -570,12 +580,12 @@ def build_selected_label_column(
 def build_selected_palette(
     labels_in_plot: Sequence[str],
     *,
-    palette_or_cmap: Union[Palette, str, Any] = "viridis",
+    palette_or_cmap: Palette | str | Any = "viridis",
     other_label: str = "other",
-    other_color: Union[Color, ColorA] = (0.7, 0.7, 0.7, 1.0),
+    other_color: Color | ColorA = (0.7, 0.7, 0.7, 1.0),
     cmap_single_position: float = 0.5,
     cmap_rgb_only: bool = False,
-) -> Dict[str, Union[Color, ColorA]]:
+) -> dict[str, Color | ColorA]:
     """Build a palette for the reduced label set (selected + other)."""
     # Keep stable unique labels
     seen: set[str] = set()
@@ -621,7 +631,7 @@ def build_selected_palette(
 def n_colors_from_cmap(
     n: int,
     cmap,
-) -> List[Tuple[float, float, float, float]]:
+) -> list[tuple[float, float, float, float]]:
     """Get n colors from green -> yellow -> dark red (RGBA).
 
     Parameters

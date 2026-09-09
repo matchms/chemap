@@ -44,12 +44,10 @@ def _unfolded_fingerprint_bit_statistics(
     count_arr   = np.empty(n, dtype=np.int32)
     first_arr   = np.empty(n, dtype=np.int32)
     
-    idx = 0
-    for key in counts:
-        unique_keys[idx] = key
-        count_arr[idx] = counts[key]
-        first_arr[idx] = first_instance[key]
-        idx += 1
+    for i, key in enumerate(counts):
+        unique_keys[i] = key
+        count_arr[i] = counts[key]
+        first_arr[i] = first_instance[key]
     
     order = np.argsort(unique_keys)
     return unique_keys[order], count_arr[order], first_arr[order]

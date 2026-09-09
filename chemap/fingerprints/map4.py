@@ -22,7 +22,6 @@ import itertools
 from collections import defaultdict
 from dataclasses import dataclass
 from hashlib import sha1
-from typing import Dict, List, Optional, Set
 import numpy as np
 from rdkit.Chem import Mol, MolToSmiles, PathToSubmol
 from rdkit.Chem.rdmolops import FindAtomEnvironmentOfRadiusN, GetDistanceMatrix
@@ -36,8 +35,8 @@ from chemap.fingerprints.mhfp import MHFPEncoderLite
 @dataclass(frozen=True)
 class _SparseCountFingerprint:
     """RDKit SparseIntVect-like shim for chemap."""
-    nz: Dict[int, int]
-    def GetNonzeroElements(self) -> Dict[int, int]:
+    nz: dict[int, int]
+    def GetNonzeroElements(self) -> dict[int, int]:
         return self.nz
 
 
@@ -77,8 +76,8 @@ class _MAP4Shingler:
         radius: int = 2,
         *,
         include_duplicated_shingles: bool = False,
-        max_dist: Optional[int] = None,
-        dist_binning: Optional[np.ndarray] = None,
+        max_dist: int | None = None,
+        dist_binning: np.ndarray | None = None,
     ):
         if radius <= 0:
             raise ValueError("radius must be > 0.")
@@ -87,14 +86,14 @@ class _MAP4Shingler:
         self.max_dist = max_dist
         self.dist_binning = dist_binning
 
-    def shingles_unique(self, mol: Mol) -> Set[bytes]:
+    def shingles_unique(self, mol: Mol) -> set[bytes]:
         return set(self._all_pairs(mol, self._get_atom_envs(mol)))
 
-    def shingles_with_counts_true(self, mol: Mol) -> Dict[bytes, int]:
+    def shingles_with_counts_true(self, mol: Mol) -> dict[bytes, int]:
         """
         True multiplicities (counts) WITHOUT suffix trick, regardless of include_duplicated_shingles.
         """
-        counts: Dict[bytes, int] = defaultdict(int)
+        counts: dict[bytes, int] = defaultdict(int)
         for sh in self._all_pairs(mol, self._get_atom_envs(mol), force_no_suffix=True):
             counts[sh] += 1
         return dict(counts)
@@ -104,8 +103,8 @@ class _MAP4Shingler:
             return int(dist)
         return int(np.digitize(dist, self.dist_binning, right=True))
 
-    def _get_atom_envs(self, mol: Mol) -> Dict[int, List[Optional[str]]]:
-        atoms_env: Dict[int, List[Optional[str]]] = {}
+    def _get_atom_envs(self, mol: Mol) -> dict[int, list[str | None]]:
+        atoms_env: dict[int, list[str | None]] = {}
         for atom in mol.GetAtoms():
             atom_identifier = atom.GetIdx()
             for r in range(1, self.radius + 1):
@@ -115,11 +114,11 @@ class _MAP4Shingler:
         return atoms_env
 
     @staticmethod
-    def _find_env(mol: Mol, atom_identifier: int, radius: int) -> Optional[str]:
-        atom_identifiers_within_radius: List[int] = FindAtomEnvironmentOfRadiusN(
+    def _find_env(mol: Mol, atom_identifier: int, radius: int) -> str | None:
+        atom_identifiers_within_radius: list[int] = FindAtomEnvironmentOfRadiusN(
             mol=mol, radius=radius, rootedAtAtom=atom_identifier
         )
-        atom_map: Dict[int, int] = {}
+        atom_map: dict[int, int] = {}
         sub_molecule: Mol = PathToSubmol(mol, atom_identifiers_within_radius, atomMap=atom_map)
 
         if atom_identifier not in atom_map:
@@ -135,18 +134,18 @@ class _MAP4Shingler:
     def _all_pairs(
         self,
         mol: Mol,
-        atoms_env: Dict[int, List[Optional[str]]],
+        atoms_env: dict[int, list[str | None]],
         *,
         force_no_suffix: bool = False,
-    ) -> List[bytes]:
+    ) -> list[bytes]:
         """
         Return shingles as bytes. If include_duplicated_shingles is enabled and not forced off,
         suffix trick is applied to make duplicates unique (MAP4C-style behavior).
         """
-        out: List[bytes] = []
+        out: list[bytes] = []
         dm = GetDistanceMatrix(mol)
         n = mol.GetNumAtoms()
-        shingle_dict: Dict[str, int] = defaultdict(int)
+        shingle_dict: dict[str, int] = defaultdict(int)
 
         for i, j in itertools.combinations(range(n), 2):
             dist_val = float(dm[i][j])
@@ -220,8 +219,8 @@ class MAP4FPGen:
         minhash_for_unfolded: bool = False,
         unfolded_bits: int = 32,  # 32 or 64, only if minhash_for_unfolded=False
         # optional distance handling
-        max_dist: Optional[int] = None,
-        dist_binning: Optional[np.ndarray] = None,
+        max_dist: int | None = None,
+        dist_binning: np.ndarray | None = None,
     ):
         self.dimensions = int(dimensions)
         self.radius = int(radius)
@@ -273,7 +272,7 @@ class MAP4FPGen:
         if not counts:
             return _SparseCountFingerprint({})
 
-        nz: Dict[int, int] = defaultdict(int)
+        nz: dict[int, int] = defaultdict(int)
 
         if self.minhash_for_unfolded:
             # MHFP token-hash domain: sha1 first 4 bytes (little endian)

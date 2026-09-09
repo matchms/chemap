@@ -1,4 +1,3 @@
-from typing import Tuple
 import numpy as np
 import pandas as pd
 from chemap.plotting import (
@@ -12,13 +11,13 @@ from chemap.plotting import (
 )
 
 
-def _is_rgb(t: Tuple[float, float, float]) -> bool:
+def _is_rgb(t: tuple[float, float, float]) -> bool:
     if not (isinstance(t, tuple) and len(t) == 3):
         return False
     return all(isinstance(x, (float, int)) and 0.0 <= float(x) <= 1.0 for x in t)
 
 
-def _is_rgba(t: Tuple[float, float, float, float]) -> bool:
+def _is_rgba(t: tuple[float, float, float, float]) -> bool:
     if not (isinstance(t, tuple) and len(t) == 4):
         return False
     return all(isinstance(x, (float, int)) and 0.0 <= float(x) <= 1.0 for x in t)

@@ -1,4 +1,3 @@
-from typing import List
 import numpy as np
 
 
@@ -11,7 +10,7 @@ def compute_duplicate_max_mass_differences(
     """
     Compute all maximum mass differences between duplicates.
     """
-    max_diffs: List[float] = []
+    max_diffs: list[float] = []
     for group in duplicates:
         idx = np.asarray(group, dtype=int)
         group_masses = masses[idx]
@@ -22,6 +21,9 @@ def compute_duplicate_max_mass_differences(
 
 
 def compute_compound_max_mass_differences(masses):
+    """
+    Compute the maximum mass difference for each compound in a group of masses.
+    """
     all_max_diffs = []
     min_mass = masses.min()
     max_mass = masses.max()

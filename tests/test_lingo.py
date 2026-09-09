@@ -124,7 +124,7 @@ def test_folded_equals_manual_folding_from_unfolded_counts():
         # keys are int64; interpret as unsigned for modulo stability
         keys_u = keys.astype(np.uint64, copy=False)
         buckets = (keys_u % np.uint64(fp_size)).astype(np.int64)
-        for b, v in zip(buckets, vals):
+        for b, v in zip(buckets, vals, strict=False):
             X_manual[i, b] += np.uint32(v)
 
     # shape and dtype sanity
@@ -139,7 +139,7 @@ def test_deterministic_unfolded_output():
     out2 = fp.transform(SMILES)
 
     assert len(out1) == len(out2)
-    for (k1, v1), (k2, v2) in zip(out1, out2):
+    for (k1, v1), (k2, v2) in zip(out1, out2, strict=False):
         np.testing.assert_array_equal(k1, k2)
         np.testing.assert_array_equal(v1, v2)
 

@@ -1,7 +1,7 @@
 import itertools
 from collections import defaultdict
+from collections.abc import Iterable
 from multiprocessing.dummy import Pool as ThreadPool
-from typing import Dict, Iterable, List, Optional, Set, Tuple
 import numpy as np
 from mhfp.encoder import MHFPEncoder
 from rdkit.Chem import AllChem, Mol
@@ -93,14 +93,14 @@ class MBP:
             order = np.argsort(bits_hashed)
             return bits_hashed[order], counts[order]
         else:
-            atom_env_pairs: Set[str] = self._calculate(mol, count)
+            atom_env_pairs: set[str] = self._calculate(mol, count)
             return np.sort(self.encoder.hash(atom_env_pairs))
 
     def calculate_many(
         self,
         mols: Iterable[Mol],
         count: bool = False,
-        number_of_threads: Optional[int] = None,
+        number_of_threads: int | None = None,
         verbose: bool = False,
     ) -> np.ndarray:
         """
@@ -137,7 +137,7 @@ class MBP:
     def calculate_many_sparse(
         self,
         mols: Iterable[Mol],
-        number_of_threads: Optional[int] = None,
+        number_of_threads: int | None = None,
         count: bool = False,
         verbose: bool = False,
     ) -> np.ndarray:
@@ -180,16 +180,16 @@ class MBP:
             pool.join()
         return results
 
-    def _calculate(self, mol: Mol, count: bool = False) -> Set[str]:
+    def _calculate(self, mol: Mol, count: bool = False) -> set[str]:
         """
         For a given molecule, return the set (or dict if count=True) of shingles.
         Shingles are built by pairing the Morgan fingerprint bits (for each radius 0...radius)
         from each atom with every other atom, together with the distance between them.
         """
-        atoms_bits: Dict[int, List[Optional[str]]] = self._get_atom_bits(mol)
+        atoms_bits: dict[int, list[str | None]] = self._get_atom_bits(mol)
         return self._all_pairs(mol, atoms_bits, count=count)
 
-    def _fold(self, pairs: Set[str]) -> np.ndarray:
+    def _fold(self, pairs: set[str]) -> np.ndarray:
         """
         Folds the fingerprint using the MinHash encoder.
         
@@ -206,7 +206,7 @@ class MBP:
         fp_hash = self.encoder.hash(pairs)
         return self.encoder.fold(fp_hash, self.dimensions)
 
-    def fold_count(self, shingle_counts: Dict[str, int]) -> np.ndarray:
+    def fold_count(self, shingle_counts: dict[str, int]) -> np.ndarray:
         """
         Folds the fingerprint using the MinHash encoder and counts.
         
@@ -238,7 +238,7 @@ class MBP:
         dist = np.digitize(dist, self.dist_binning, right=True)
         return dist
     
-    def _get_atom_bits(self, mol: Mol) -> Dict[int, List[Optional[str]]]:
+    def _get_atom_bits(self, mol: Mol) -> dict[int, list[str | None]]:
         """
         Compute the Morgan fingerprint bits for each atom in the molecule.
         
@@ -258,10 +258,10 @@ class MBP:
             of Morgan bit strings. If a bit is not found for a given radius,
             the slot remains None.
         """
-        atoms_bits: Dict[int, List[Optional[str]]] = {
+        atoms_bits: dict[int, list[str | None]] = {
             atom.GetIdx(): [None] * (self.radius + 1) for atom in mol.GetAtoms()
         }
-        bitInfo: Dict[int, List[Tuple[int, int]]] = {}
+        bitInfo: dict[int, list[tuple[int, int]]] = {}
 
         ao = AllChem.AdditionalOutput()
         ao.CollectBitInfoMap()
@@ -275,9 +275,9 @@ class MBP:
         return atoms_bits
 
     def _all_pairs(
-        self, mol: Mol, atoms_bits: Dict[int, List[Optional[str]]],
+        self, mol: Mol, atoms_bits: dict[int, list[str | None]],
         count: bool = False
-    ) -> Set[str]:
+    ) -> set[str]:
         """
         Build the set (or dict if count=True) of shingle strings from pairs of atoms.
         
@@ -306,7 +306,7 @@ class MBP:
         if count:
             atom_pairs = {}
         else:
-            atom_pairs: Set[str] = set()
+            atom_pairs: set[str] = set()
         distance_matrix = GetDistanceMatrix(mol)
         num_atoms = mol.GetNumAtoms()
         shingle_dict = defaultdict(int)

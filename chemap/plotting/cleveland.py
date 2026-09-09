@@ -1,5 +1,5 @@
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Dict, Mapping, Optional, Sequence, Tuple
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.axes import Axes
@@ -10,7 +10,7 @@ from matplotlib.lines import Line2D
 @dataclass(frozen=True)
 class ClevelandStyle:
     """Styling defaults for a Cleveland-ish dot plot."""
-    figsize: Tuple[float, float] = (9.0, 6.0)
+    figsize: tuple[float, float] = (9.0, 6.0)
     dpi: int = 600
     markersize: float = 7.0
     markeredgecolor: str = "white"
@@ -28,23 +28,23 @@ def cleveland_dotplot(
     # Data in "tidy" arrays
     row: Sequence[str],
     x: Sequence[float],
-    color_group: Optional[Sequence[str]] = None,
-    marker_group: Optional[Sequence[str]] = None,
-    connect_group: Optional[Sequence[str]] = None,
-    marker_zorder: Optional[Mapping[str, float]] = None,
+    color_group: Sequence[str] | None = None,
+    marker_group: Sequence[str] | None = None,
+    connect_group: Sequence[str] | None = None,
+    marker_zorder: Mapping[str, float] | None = None,
 
     # Ordering / labels
-    row_order: Optional[Sequence[str]] = None,
+    row_order: Sequence[str] | None = None,
     row_label_fn=None,
 
     # Mappings
-    color_map: Optional[Dict[str, str]] = None,
-    marker_map: Optional[Dict[str, str]] = None,
+    color_map: dict[str, str] | None = None,
+    marker_map: dict[str, str] | None = None,
 
     # Figure/axes
     title: str = "",
     xlabel: str = "",
-    ax: Optional[Axes] = None,
+    ax: Axes | None = None,
 
     # Behavior
     connect: bool = True,
@@ -63,8 +63,8 @@ def cleveland_dotplot(
     color_legend_position: str = "lower left",
     marker_legend_position: str = "lower right",
 
-    style: ClevelandStyle = ClevelandStyle(),
-) -> Tuple[Figure, Axes]:
+    style: ClevelandStyle | None = None,
+) -> tuple[Figure, Axes]:
     """
     Generic Cleveland-ish dot plot.
 
@@ -147,6 +147,8 @@ def cleveland_dotplot(
     # --- axes setup ---
     if ax is None:
         fig_h = max(2.5, len(row_order) * 0.28)
+        if style is None:
+            style = ClevelandStyle()
         fig, ax = plt.subplots(figsize=(style.figsize[0], fig_h), dpi=style.dpi)
     else:
         fig = ax.figure
@@ -155,7 +157,7 @@ def cleveland_dotplot(
     if row_range:
         from collections import defaultdict
         xs_by_row = defaultdict(list)
-        for r, xv in zip(row, x):
+        for r, xv in zip(row, x, strict=True):
             xs_by_row[r].append(float(xv))
 
         for r in row_order:
@@ -175,14 +177,14 @@ def cleveland_dotplot(
     # --- optional connectors ---
     if connect:
         # For each (row, connect_group), connect min->max x
-        key_arr = list(zip(row, connect_group))
+        key_arr = list(zip(row, connect_group, strict=True))
         # group indices by key
         from collections import defaultdict
         idx_by_key = defaultdict(list)
         for i, k in enumerate(key_arr):
             idx_by_key[k].append(i)
 
-        for (r, cg), idxs in idx_by_key.items():
+        for (r, _cg), idxs in idx_by_key.items():
             if len(idxs) < 2:
                 continue
             xs = x[idxs]

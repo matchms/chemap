@@ -1,10 +1,10 @@
 import struct
+from collections.abc import Iterable, Sequence
 from hashlib import sha1
-from typing import Iterable, Sequence, Union
 import numpy as np
 
 
-BytesLike = Union[bytes, bytearray, memoryview]
+BytesLike = bytes | bytearray | memoryview
 
 
 class MHFPEncoderLite:

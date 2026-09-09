@@ -135,7 +135,7 @@ def test_folded_false_binary_uses_ensure_smiles_accepts_mols():
     assert _is_unfolded_binary(out)
     assert len(out) == len(SMILES)
     # feature id == len(smiles)
-    for s, arr in zip(SMILES, out):
+    for s, arr in zip(SMILES, out, strict=False):
         np.testing.assert_array_equal(arr, np.array([len(s)], dtype=np.int64))
 
 
@@ -145,7 +145,7 @@ def test_folded_false_count_uses_ensure_smiles_and_returns_float32_vals():
 
     assert _is_unfolded_count(out)
     assert len(out) == len(SMILES)
-    for s, (keys, vals) in zip(SMILES, out):
+    for s, (keys, vals) in zip(SMILES, out, strict=False):
         np.testing.assert_array_equal(keys, np.array([1, 2], dtype=np.int64))
         np.testing.assert_array_equal(vals, np.array([float(len(s)), float(len(s) + 1)], dtype=np.float32))
 
@@ -169,7 +169,7 @@ def test_parallel_map_deterministic(n_jobs):
     out2 = fp.transform(SMILES)
 
     assert len(out1) == len(out2)
-    for (k1, v1), (k2, v2) in zip(out1, out2):
+    for (k1, v1), (k2, v2) in zip(out1, out2, strict=False):
         np.testing.assert_array_equal(k1, k2)
         np.testing.assert_array_equal(v1, v2)
 

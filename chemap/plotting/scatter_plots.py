@@ -1,5 +1,6 @@
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, Union
+from typing import Any
 import matplotlib as mpl
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
@@ -29,7 +30,8 @@ from chemap.types import Color, ColorA, Palette
 
 @dataclass(frozen=True)
 class ScatterStyle:
-    figsize: Tuple[float, float] = (20, 20)
+    """Styling defaults for scatter plots."""
+    figsize: tuple[float, float] = (20, 20)
     title: str = "UMAP of embeddings"
 
     s: float = 5.0
@@ -39,7 +41,7 @@ class ScatterStyle:
     display_legend: bool = True
     legend_outside: bool = False
 
-    legend_title: Optional[str] = None
+    legend_title: str | None = None
     legend_loc: str = "lower left"
     legend_frameon: bool = False
     legend_ncol: int = 1
@@ -56,7 +58,7 @@ def _validate_required_columns(df: pd.DataFrame, cols: Sequence[str]) -> None:
         raise KeyError(f"data_plot is missing required columns: {missing}")
 
 
-def _to_rgba(color: Union[Color, ColorA]) -> ColorA:
+def _to_rgba(color: Color | ColorA) -> ColorA:
     return mcolors.to_rgba(color)
 
 
@@ -64,11 +66,11 @@ def _build_legend_handles(
     ordered_labels: Sequence[str],
     palette: Palette,
     *,
-    fallback: Union[Color, ColorA] = (0.5, 0.5, 0.5, 1.0),
+    fallback: Color | ColorA = (0.5, 0.5, 0.5, 1.0),
     markersize: float = 8.0,
     alpha: float = 0.8,
-) -> List[Line2D]:
-    handles: List[Line2D] = []
+) -> list[Line2D]:
+    handles: list[Line2D] = []
     for lbl in ordered_labels:
         col = palette.get(lbl, fallback)
         handles.append(
@@ -94,10 +96,10 @@ def scatter_plot_base(
     y_col: str = "y",
     label_col: str,
     palette: Palette,
-    legend_labels: Optional[Sequence[str]] = None,
-    style: ScatterStyle = ScatterStyle(),
-    ax: Optional[Axes] = None,
-) -> Tuple[Figure, Axes]:
+    legend_labels: Sequence[str] | None = None,
+    style: ScatterStyle | None = None,
+    ax: Axes | None = None,
+) -> tuple[Figure, Axes]:
     """A base scatter plot function that takes pre-mapped labels and a palette.
     This is not intended for direct use, but as a building block for the more user-friendly wrapper functions below.
     """
@@ -111,6 +113,9 @@ def scatter_plot_base(
         legend_labels = [str(x) for x in legend_labels]
 
     colors = data_plot[label_col].map(lambda v: palette.get(str(v), (0.5, 0.5, 0.5, 1.0)))
+
+    if style is None:
+        style = ScatterStyle()
 
     if ax is None:
         fig, ax = plt.subplots(figsize=style.figsize)
@@ -186,19 +191,19 @@ def scatter_plot_all_classes(
     y_col: str = "y",
     class_col: str = "Class",
     subclass_col: str = "Subclass",
-    palette_or_cmap: Union[Palette, str, mpl.colors.Colormap] = "viridis",
+    palette_or_cmap: Palette | str | mpl.colors.Colormap = "viridis",
     # ordering options (same semantics as before)
-    class_order: Optional[Sequence[str]] = None,
-    subclass_order_within_class: Optional[Mapping[str, Sequence[str]]] = None,
+    class_order: Sequence[str] | None = None,
+    subclass_order_within_class: Mapping[str, Sequence[str]] | None = None,
     # plotting style (surface the key knobs; advanced users can pass ScatterStyle via style=)
-    figsize: Tuple[float, float] = (20, 20),
+    figsize: tuple[float, float] = (20, 20),
     title: str = "UMAP of embeddings",
     s: float = 5.0,
     alpha: float = 0.25,
     linewidths: float = 0.0,
     display_legend: bool = True,
     legend_outside: bool = False,
-    legend_title: Optional[str] = None,
+    legend_title: str | None = None,
     legend_loc: str = "lower left",
     legend_frameon: bool = False,
     legend_ncol: int = 1,
@@ -206,8 +211,8 @@ def scatter_plot_all_classes(
     legend_alpha: float = 0.8,
     hide_ticks: bool = True,
     hide_axis_labels: bool = True,
-    ax: Optional[Axes] = None,
-) -> Tuple[Figure, Axes, Dict[str, Union[Color, ColorA]]]:
+    ax: Axes | None = None,
+) -> tuple[Figure, Axes, dict[str, Color | ColorA]]:
     """Balanced/small label-space scatter.
 
     Parameters
@@ -254,7 +259,7 @@ def scatter_plot_all_classes(
     present_subclasses = present[subclass_col].dropna().map(str).tolist()
 
     if isinstance(palette_or_cmap, Mapping):
-        palette: Dict[str, Union[Color, ColorA]] = {str(k): v for k, v in palette_or_cmap.items()}
+        palette: dict[str, Color | ColorA] = {str(k): v for k, v in palette_or_cmap.items()}
     else:
         palette = palette_from_cmap(
             present_subclasses,
@@ -312,7 +317,7 @@ def scatter_plot_hierarchical_labels(
     max_superclass_size: int = 10_000,
     rare_label: str = "Rare Superclass or Unknown",
     sep: str = "->",
-    top_k_classes: Optional[int] = None,
+    top_k_classes: int | None = None,
     # palette params
     other_suffix: str = "other",
     base_cmap: str = "tab20",
@@ -321,7 +326,7 @@ def scatter_plot_hierarchical_labels(
     child_lighten_min: float = 0.15,
     child_lighten_max: float = 0.65,
     # plotting style
-    figsize: Tuple[float, float] = (20, 20),
+    figsize: tuple[float, float] = (20, 20),
     title: str = "UMAP of embeddings",
     s: float = 2.0,
     alpha: float = 0.2,
@@ -336,8 +341,8 @@ def scatter_plot_hierarchical_labels(
     legend_alpha: float = 0.8,
     hide_ticks: bool = True,
     hide_axis_labels: bool = True,
-    ax: Optional[Axes] = None,
-) -> Tuple[Figure, Axes, Dict[str, str], Dict[str, Union[Color, ColorA]]]:
+    ax: Axes | None = None,
+) -> tuple[Figure, Axes, dict[str, str], dict[str, Color | ColorA]]:
     """Hierarchical-label scatter (builds display labels and palette internally).
     
     Parameters
@@ -384,7 +389,7 @@ def scatter_plot_hierarchical_labels(
 
     df = data_plot if inplace else data_plot.copy()
 
-    class_to_label, info = build_hier_label_map(
+    class_to_label, _info = build_hier_label_map(
         df,
         config=LabelMapConfig(
             superclass_col=superclass_col,
@@ -463,17 +468,17 @@ def scatter_plot_selected_only(
     y_col: str = "y",
     class_col: str = "Class",
     subclass_col: str = "Subclass",
-    selected_classes: Optional[Sequence[Any]] = None,
-    selected_subclasses: Optional[Sequence[Any]] = None,
+    selected_classes: Sequence[Any] | None = None,
+    selected_subclasses: Sequence[Any] | None = None,
     selected_size_relative: float = 2.0,
     other_label: str = "other",
-    other_color: Union[Color, ColorA] = (0.8, 0.8, 0.8, 0.1),
-    palette_or_cmap: Union[Palette, str, Any] = "viridis",
+    other_color: Color | ColorA = (0.8, 0.8, 0.8, 0.1),
+    palette_or_cmap: Palette | str | Any = "viridis",
     cmap_single_position: float = 0.5,
     cmap_rgb_only: bool = False,
-    style: ScatterStyle = ScatterStyle(),
-    ax: Optional[Axes] = None,
-) -> Tuple[Figure, Axes, Dict[str, Union[Color, ColorA]]]:
+    style: ScatterStyle | None = None,
+    ax: Axes | None = None,
+) -> tuple[Figure, Axes, dict[str, Color | ColorA]]:
     """Scatter plot where only a selected subset is colored; all other points are gray 'other'.
 
     Additionally, selected points get a larger marker size: `style.s * selected_size_relative`.
@@ -506,6 +511,9 @@ def scatter_plot_selected_only(
     for col in (x_col, y_col, class_col, subclass_col):
         if col not in data_plot.columns:
             raise KeyError(f"data_plot is missing required column: {col}")
+
+    if style is None:
+        style = ScatterStyle()
 
     df = data_plot.copy()
 
@@ -563,7 +571,7 @@ def scatter_plot_selected_only(
 
     from matplotlib.lines import Line2D
 
-    handles: List[Line2D] = []
+    handles: list[Line2D] = []
     for lbl in legend_labels:
         handles.append(
             Line2D(
