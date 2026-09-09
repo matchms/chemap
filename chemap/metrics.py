@@ -1,4 +1,4 @@
-from typing import Literal, Union
+from typing import Literal
 import numba
 import numpy as np
 import scipy.sparse as sp
@@ -11,7 +11,7 @@ import scipy.sparse as sp
 # Unfolded inputs
 UnfoldedBinary = np.ndarray
 UnfoldedCount = tuple[np.ndarray, np.ndarray]
-UnfoldedFingerprint = Union[UnfoldedBinary, UnfoldedCount]
+UnfoldedFingerprint = UnfoldedBinary | UnfoldedCount
 
 # Dense / sparse fixed-size
 DenseVector = np.ndarray
@@ -107,6 +107,7 @@ def tanimoto_similarity_sparse_binary(bits1: np.ndarray, bits2: np.ndarray) -> f
 
 @numba.njit(cache=True, fastmath=True)
 def tanimoto_distance_sparse_binary(bits1: np.ndarray, bits2: np.ndarray) -> float:
+    """Distance = 1 - similarity."""
     return 1.0 - tanimoto_similarity_sparse_binary(bits1, bits2)
 
 
@@ -185,6 +186,7 @@ def tanimoto_distance_sparse(ind1, data1, ind2, data2) -> float:
 
 @numba.njit(cache=True, fastmath=True)
 def tanimoto_similarity_sparse(ind1, data1, ind2, data2) -> float:
+    """Similarity = 1 - distance."""
     return 1.0 - tanimoto_distance_sparse(ind1, data1, ind2, data2)
 
 

@@ -79,7 +79,19 @@ def compound_nearest_neighbors(
 def compute_approx_nearest_neighbors(
     fingerprints_coarse, fingerprints_fine, k_pca: int = 500, k_morgan: int = 100
 ) -> tuple[Any, Any]:
+    """Compute approximate nearest neighbors using PCA and Ruzicka similarity.
 
+    Parameters
+    ----------
+    fingerprints_coarse:
+        Dense fingerprints (e.g., 1024-bit) used for PCA-based dimensionality reduction.
+    fingerprints_fine:
+        Sparse fingerprints (e.g., 4096-bit) used for refined Ruzicka-based neighbor search.
+    k_pca:
+        Number of neighbors to consider in the PCA-based approximate nearest neighbor search.
+    k_morgan:
+        Number of neighbors to consider in the refined Ruzicka-based neighbor search.
+    """
     t_start = time.time()
     print(">" * 20, "Compute PCA vectors")
     pca = PCA(n_components=100)

@@ -6,6 +6,7 @@ import pooch
 
 
 class DatasetLoader:
+    """Class to load datasets from local files or web sources."""
     def __init__(self, cache_dir="./data_cache"):
         self.cache_dir = cache_dir
 
@@ -54,7 +55,7 @@ class DatasetLoader:
         doi_pattern = r"(10\.\d{4,9}/[-._;()/:a-zA-Z0-9]+)"
 
         if not source.startswith("doi") or not bool(re.search(doi_pattern, source)):
-            ValueError(f"Could not detect DOI in source {source}.")
+            raise ValueError(f"Could not detect DOI in source {source}.")
 
         return self._from_registry(source, **kwargs)
 

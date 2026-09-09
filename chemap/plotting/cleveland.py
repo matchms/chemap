@@ -63,7 +63,7 @@ def cleveland_dotplot(
     color_legend_position: str = "lower left",
     marker_legend_position: str = "lower right",
 
-    style: ClevelandStyle = ClevelandStyle(),
+    style: ClevelandStyle | None = None,
 ) -> tuple[Figure, Axes]:
     """
     Generic Cleveland-ish dot plot.
@@ -147,6 +147,8 @@ def cleveland_dotplot(
     # --- axes setup ---
     if ax is None:
         fig_h = max(2.5, len(row_order) * 0.28)
+        if style is None:
+            style = ClevelandStyle()
         fig, ax = plt.subplots(figsize=(style.figsize[0], fig_h), dpi=style.dpi)
     else:
         fig = ax.figure
@@ -155,7 +157,7 @@ def cleveland_dotplot(
     if row_range:
         from collections import defaultdict
         xs_by_row = defaultdict(list)
-        for r, xv in zip(row, x):
+        for r, xv in zip(row, x, strict=True):
             xs_by_row[r].append(float(xv))
 
         for r in row_order:
@@ -175,14 +177,14 @@ def cleveland_dotplot(
     # --- optional connectors ---
     if connect:
         # For each (row, connect_group), connect min->max x
-        key_arr = list(zip(row, connect_group))
+        key_arr = list(zip(row, connect_group, strict=True))
         # group indices by key
         from collections import defaultdict
         idx_by_key = defaultdict(list)
         for i, k in enumerate(key_arr):
             idx_by_key[k].append(i)
 
-        for (r, cg), idxs in idx_by_key.items():
+        for (r, _cg), idxs in idx_by_key.items():
             if len(idxs) < 2:
                 continue
             xs = x[idxs]

@@ -36,7 +36,7 @@ class _FakeBitVector:
     """Mimics RDKit ExplicitBitVect returned by GetFingerprint()."""
     def __init__(self, nbits: int, on_bits: Sequence[int]):
         self._nbits = int(nbits)
-        self._on_bits = sorted(set(int(b) for b in on_bits))
+        self._on_bits = sorted({int(b) for b in on_bits})
 
     def GetNumBits(self):
         return self._nbits

@@ -79,7 +79,7 @@ def test_group_length_mismatch_raises():
 
 
 def test_default_row_order_is_stable_by_appearance():
-    fig, ax = cleveland_dotplot(
+    _, ax = cleveland_dotplot(
         row=["B", "A", "B", "C"],
         x=[0.2, 0.1, 0.3, 0.4],
         show_legends=False,
@@ -95,7 +95,7 @@ def test_default_row_order_is_stable_by_appearance():
 def test_row_range_indicator_drawn_per_row_with_2plus_points():
     # Row A has 3 points -> should get a range line.
     # Row B has 1 point -> no range line.
-    fig, ax = cleveland_dotplot(
+    _, ax = cleveland_dotplot(
         row=["A", "A", "A", "B"],
         x=[10, 20, 5, 7],
         row_range=True,
@@ -122,7 +122,7 @@ def test_connectors_drawn_within_row_and_connect_group_and_use_color_map():
     # One point in (row=A, group=g2) => no connector for that.
     color_map = {"binary": "crimson", "count": "teal"}
 
-    fig, ax = cleveland_dotplot(
+    _, ax = cleveland_dotplot(
         row=["A", "A", "A"],
         x=[1.0, 3.0, 2.0],
         color_group=["binary", "binary", "count"],
@@ -153,7 +153,7 @@ def test_marker_zorder_applied_per_marker_group():
     marker_map = {"dense": "o", "sparse": "^"}
     marker_zorder = {"dense": 3.0, "sparse": 5.0}
 
-    fig, ax = cleveland_dotplot(
+    _, ax = cleveland_dotplot(
         row=["A", "A"],
         x=[1.0, 1.0],
         marker_group=["dense", "sparse"],
@@ -179,7 +179,7 @@ def test_marker_zorder_applied_per_marker_group():
 
 def test_zero_line_added_only_when_min_x_leq_zero():
     # Case 1: includes negative -> should add zero vline
-    fig, ax = cleveland_dotplot(
+    _, ax = cleveland_dotplot(
         row=["A", "B"],
         x=[-0.1, 0.2],
         connect=False,
@@ -190,7 +190,7 @@ def test_zero_line_added_only_when_min_x_leq_zero():
     assert _has_zero_vline(ax) is True
 
     # Case 2: all positive -> should not add zero vline
-    fig, ax = cleveland_dotplot(
+    _, ax = cleveland_dotplot(
         row=["A", "B"],
         x=[0.1, 0.2],
         connect=False,
@@ -201,7 +201,7 @@ def test_zero_line_added_only_when_min_x_leq_zero():
     assert _has_zero_vline(ax) is False
 
     # Case 3: negative but disabled -> should not add
-    fig, ax = cleveland_dotplot(
+    _, ax = cleveland_dotplot(
         row=["A", "B"],
         x=[-0.1, 0.2],
         connect=False,
@@ -216,7 +216,7 @@ def test_legends_created_when_enabled_and_groups_present():
     marker_map = {"dense": "o", "sparse": "^"}
     color_map = {"binary": "crimson", "count": "teal"}
 
-    fig, ax = cleveland_dotplot(
+    _, ax = cleveland_dotplot(
         row=["A", "A", "B", "B"],
         x=[1.0, 2.0, 3.0, 4.0],
         marker_group=["dense", "sparse", "dense", "sparse"],
@@ -238,7 +238,7 @@ def test_legends_created_when_enabled_and_groups_present():
 
 
 def test_no_legends_when_disabled():
-    fig, ax = cleveland_dotplot(
+    _, ax = cleveland_dotplot(
         row=["A", "B"],
         x=[1.0, 2.0],
         show_legends=False,

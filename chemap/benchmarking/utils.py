@@ -21,6 +21,9 @@ def compute_duplicate_max_mass_differences(
 
 
 def compute_compound_max_mass_differences(masses):
+    """
+    Compute the maximum mass difference for each compound in a group of masses.
+    """
     all_max_diffs = []
     min_mass = masses.min()
     max_mass = masses.max()

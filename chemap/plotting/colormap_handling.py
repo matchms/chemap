@@ -55,7 +55,7 @@ def _normalize_label_value(x: Any) -> str | None:
 def build_hier_label_map(
     labels: pd.DataFrame,
     *,
-    config: LabelMapConfig = LabelMapConfig(),
+    config: LabelMapConfig | None = None,
 ) -> tuple[dict[str, str], dict[str, dict[str, int | str]]]:
     """Build a mapping from fine-grained class labels to display labels.
 
@@ -86,6 +86,9 @@ def build_hier_label_map(
     """
     if not isinstance(labels, pd.DataFrame):
         raise TypeError("labels must be a pandas DataFrame")
+
+    if config is None:
+        config = LabelMapConfig()
 
     missing_cols = [c for c in (config.superclass_col, config.class_col) if c not in labels.columns]
     if missing_cols:
@@ -226,7 +229,7 @@ def _distinct_base_colors(n: int, cmap_name: str) -> list[tuple[float, float, fl
 def make_hier_palette(
     display_labels: Iterable[Any],
     *,
-    config: PaletteConfig = PaletteConfig(),
+    config: PaletteConfig | None = None,
 ) -> dict[str, tuple[float, float, float]]:
     """Create a hierarchical color palette for plot-ready display labels.
 
@@ -253,6 +256,9 @@ def make_hier_palette(
     - "...->other" gets `config.neutral_other`.
     - `config.rare_label` gets `config.neutral_rare`.
     """
+    if config is None:
+        config = PaletteConfig()
+
     # Normalize, drop NA, preserve uniqueness with stable ordering
     s = pd.Series(list(display_labels))
     s = s[~s.isna()].map(lambda x: str(x))
@@ -391,7 +397,7 @@ def _normalize_for_sorting(x: Any, *, strip: bool = True) -> str:
 def sorted_present_pairs(
     data_plot: pd.DataFrame,
     *,
-    config: PresentPairsConfig = PresentPairsConfig(),
+    config: PresentPairsConfig | None = None,
 ) -> pd.DataFrame:
     """Return a sorted DataFrame of unique (Class, Subclass) pairs present in `data_plot`.
 
@@ -424,6 +430,9 @@ def sorted_present_pairs(
     """
     if not isinstance(data_plot, pd.DataFrame):
         raise TypeError("data_plot must be a pandas DataFrame")
+
+    if config is None:
+        config = PresentPairsConfig()
 
     missing_cols = [c for c in (config.class_col, config.subclass_col) if c not in data_plot.columns]
     if missing_cols:
@@ -522,7 +531,7 @@ def palette_from_cmap(
         return {}
 
     positions = np.linspace(0.0, 1.0, n) if n > 1 else np.array([0.5])
-    return {lbl: cmap(pos) for lbl, pos in zip(labels, positions)}
+    return {lbl: cmap(pos) for lbl, pos in zip(labels, positions, strict=True)}
 
 
 def build_selected_label_column(

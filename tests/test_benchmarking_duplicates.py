@@ -202,7 +202,7 @@ def test_plot_duplicates_by_experiment_happy_path():
         "B": duplicates_b,
     }
 
-    fig, ax, results = plot_duplicates_by_experiment(
+    fig, _ax, results = plot_duplicates_by_experiment(
         experiments,
         masses,
         bins=[(0, 1), (1, 10), (10, np.inf)],

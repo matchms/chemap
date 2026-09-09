@@ -1,6 +1,6 @@
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Literal, Optional, Union
+from typing import Literal
 import numpy as np
 import scipy.sparse as sp
 
@@ -11,9 +11,9 @@ import scipy.sparse as sp
 
 CountFingerprint = tuple[np.ndarray, np.ndarray]  # (bits, counts)
 BinaryFingerprint = np.ndarray                    # (bits,)
-FingerprintInput = Union[CountFingerprint, BinaryFingerprint]
+FingerprintInput = CountFingerprint | BinaryFingerprint
 
-TFTransform = Optional[Callable[[np.ndarray], np.ndarray]]  # for count fingerprints only
+TFTransform = Callable[[np.ndarray], np.ndarray] | None  # for count fingerprints only
 
 
 @dataclass(frozen=True, slots=True)
@@ -366,7 +366,6 @@ def fingerprints_to_csr(
                     if tf_transform is not None:
                         vals = tf_transform(vals)
                 else:
-                    uniq_bits = uniq_bits
                     vals = np.ones(uniq_bits.shape[0], dtype=dtype)
             else:
                 uniq_bits = bits_i64

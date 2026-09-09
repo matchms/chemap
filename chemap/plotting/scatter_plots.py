@@ -30,6 +30,7 @@ from chemap.types import Color, ColorA, Palette
 
 @dataclass(frozen=True)
 class ScatterStyle:
+    """Styling defaults for scatter plots."""
     figsize: tuple[float, float] = (20, 20)
     title: str = "UMAP of embeddings"
 
@@ -96,7 +97,7 @@ def scatter_plot_base(
     label_col: str,
     palette: Palette,
     legend_labels: Sequence[str] | None = None,
-    style: ScatterStyle = ScatterStyle(),
+    style: ScatterStyle | None = None,
     ax: Axes | None = None,
 ) -> tuple[Figure, Axes]:
     """A base scatter plot function that takes pre-mapped labels and a palette.
@@ -112,6 +113,9 @@ def scatter_plot_base(
         legend_labels = [str(x) for x in legend_labels]
 
     colors = data_plot[label_col].map(lambda v: palette.get(str(v), (0.5, 0.5, 0.5, 1.0)))
+
+    if style is None:
+        style = ScatterStyle()
 
     if ax is None:
         fig, ax = plt.subplots(figsize=style.figsize)
@@ -385,7 +389,7 @@ def scatter_plot_hierarchical_labels(
 
     df = data_plot if inplace else data_plot.copy()
 
-    class_to_label, info = build_hier_label_map(
+    class_to_label, _info = build_hier_label_map(
         df,
         config=LabelMapConfig(
             superclass_col=superclass_col,
@@ -472,7 +476,7 @@ def scatter_plot_selected_only(
     palette_or_cmap: Palette | str | Any = "viridis",
     cmap_single_position: float = 0.5,
     cmap_rgb_only: bool = False,
-    style: ScatterStyle = ScatterStyle(),
+    style: ScatterStyle | None = None,
     ax: Axes | None = None,
 ) -> tuple[Figure, Axes, dict[str, Color | ColorA]]:
     """Scatter plot where only a selected subset is colored; all other points are gray 'other'.
@@ -507,6 +511,9 @@ def scatter_plot_selected_only(
     for col in (x_col, y_col, class_col, subclass_col):
         if col not in data_plot.columns:
             raise KeyError(f"data_plot is missing required column: {col}")
+
+    if style is None:
+        style = ScatterStyle()
 
     df = data_plot.copy()
 

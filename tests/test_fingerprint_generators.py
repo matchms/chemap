@@ -74,7 +74,7 @@ def _build_skfp_transformers() -> list[tuple[str, Any, bool]]:
             params = base.get_params(deep=False)
             supports_count = _supports_count_param(params) is not None
             out.append((f"skfp_{cls_name}", base, supports_count))
-        except Exception:
+        except Exception:  # noqa: S112
             continue
 
     return out

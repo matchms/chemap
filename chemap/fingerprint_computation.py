@@ -1,6 +1,6 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Literal, Optional, Protocol, Union
+from typing import Any, Literal, Optional, Protocol
 import numpy as np
 import scipy.sparse as sp
 from joblib import Parallel, delayed
@@ -15,9 +15,9 @@ from chemap.types import UnfoldedBinary, UnfoldedCount
 # -----------------------------
 
 InvalidPolicy = Literal["drop", "keep", "raise"]
-Scaling = Optional[Literal["log"]]
+Scaling = Literal["log"] | None
 
-FingerprintResult = Union[np.ndarray, sp.csr_matrix, UnfoldedBinary, UnfoldedCount]
+FingerprintResult = np.ndarray | sp.csr_matrix | UnfoldedBinary | UnfoldedCount
 
 
 @dataclass(frozen=True)
@@ -85,6 +85,7 @@ class SklearnTransformer(Protocol):
 
 
 class RobustMolTransformer(BaseEstimator, TransformerMixin):
+    """Sklearn-style transformer that robustly converts SMILES to RDKit Mol objects."""
     def __init__(self, n_jobs=-1):
         self.n_jobs = n_jobs
 
@@ -104,7 +105,7 @@ class RobustMolTransformer(BaseEstimator, TransformerMixin):
 def compute_fingerprints(
     smiles: Sequence[str],
     fpgen: Any,
-    config: FingerprintConfig = FingerprintConfig(),
+    config: FingerprintConfig | None = None,
     *,
     show_progress: bool = False,
     n_jobs: int = -1,
@@ -127,6 +128,9 @@ def compute_fingerprints(
         - config.count False: List[np.ndarray[int64]] (sorted feature IDs)
         - config.count True : List[Tuple[np.ndarray[int64], np.ndarray[float32]]] (sorted feature IDs + values)
     """
+    if config is None:
+        config = FingerprintConfig()
+
     _validate_config(config)
 
     if _looks_like_rdkit_fpgen(fpgen):
@@ -330,7 +334,7 @@ def _rdkit_unfolded(
     if cfg.count:
         out: UnfoldedCount = []
         for s, mol in tqdm(
-                zip(smiles, mols),
+                zip(smiles, mols, strict=True),
                 disable=not show_progress,
                 desc="Compute fingerprints",
                 total=len(mols)
@@ -352,7 +356,7 @@ def _rdkit_unfolded(
 
     out: UnfoldedBinary = []
     for s, mol in tqdm(
-            zip(smiles, mols),
+            zip(smiles, mols, strict=True),
             disable=not show_progress,
             desc="Compute fingerprints",
             total=len(mols)
@@ -387,7 +391,7 @@ def _rdkit_folded_dense(
     pending_invalid: list[int] = []  # indices in `rows` that need backfill after we learn D
 
     for s, mol in tqdm(
-            zip(smiles, mols),
+            zip(smiles, mols, strict=True),
             disable=not show_progress,
             desc="Compute fingerprints",
             total=len(mols)
@@ -456,7 +460,7 @@ def _rdkit_folded_csr(
         w = np.asarray(cfg.folded_weights, dtype=np.float32).ravel()
 
     for s, mol in tqdm(
-            zip(smiles, mols),
+            zip(smiles, mols, strict=True),
             disable=not show_progress,
             desc="Compute fingerprints",
             total=len(mols)
