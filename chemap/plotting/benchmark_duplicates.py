@@ -1,5 +1,6 @@
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, List, Mapping, Optional, Sequence, Tuple
+from typing import Any
 import matplotlib.pyplot as plt
 import numpy as np
 from chemap.benchmarking import compute_duplicate_max_mass_differences
@@ -18,7 +19,7 @@ class DuplicateBinResult:
     """Binned duplicate statistics for one experiment/dataset."""
     name: str
     bin_edges: Bins
-    bin_labels: List[str]
+    bin_labels: list[str]
     bin_counts: np.ndarray  # shape (n_bins,)
     total: int
 
@@ -28,8 +29,8 @@ def default_bins_da() -> Bins:
     return [(0, 1), (1, 10), (10, 50), (50, 100), (100, 200), (200, 400), (400, np.inf)]
 
 
-def _format_bin_labels(bins: Bins, unit: str = "Da") -> List[str]:
-    labels: List[str] = []
+def _format_bin_labels(bins: Bins, unit: str = "Da") -> list[str]:
+    labels: list[str] = []
     for low, high in bins:
         if np.isinf(high):
             labels.append(f"{low:g}-inf {unit}")
@@ -42,7 +43,7 @@ def compute_duplicate_bin_counts(
     duplicates: Sequence[Sequence[int]],
     masses: Sequence[float],
     *,
-    bins: Optional[Bins] = None,
+    bins: Bins | None = None,
     unit: str = "Da",
     name: str = "experiment",
 ) -> DuplicateBinResult:
@@ -105,7 +106,7 @@ def compute_duplicate_bin_counts(
 def plot_duplicate_bins(
     results: Sequence[DuplicateBinResult],
     *,
-    figsize: Tuple[float, float] = (10, 6),
+    figsize: tuple[float, float] = (10, 6),
     sort_by_total: bool = True,
     cmap = green_yellow_red,
     bar_height: float = 0.5,
@@ -114,8 +115,8 @@ def plot_duplicate_bins(
     xlabel: str = "Compounds with Fingerprint Duplicates",
     title: str = "Duplicate Statistics by Experiment",
     legend_title: str = "Maximum mass difference\n(for identical fingerprints)",
-    ax: Optional[plt.Axes] = None,
-) -> Tuple[plt.Figure, plt.Axes]:
+    ax: plt.Axes | None = None,
+) -> tuple[plt.Figure, plt.Axes]:
     """Plot stacked horizontal bars of duplicate counts across bins.
 
     Parameters
@@ -202,15 +203,15 @@ def plot_duplicates_by_experiment(
     experiments: Mapping[str, Mapping[str, Any]],
     masses_arr: np.ndarray,
     *,
-    bins: Optional[Bins] = None,
+    bins: Bins | None = None,
     unit: str = "Da",
     # plot options
     cmap = green_yellow_red,
     title: str = "Duplicate fingerprints plot",
-    figsize: Tuple[float, float] = (10, 6),
-    ax: Optional[plt.Axes] = None,
+    figsize: tuple[float, float] = (10, 6),
+    ax: plt.Axes | None = None,
     sort_by_total: bool = True,
-) -> Tuple[plt.Figure, plt.Axes, List[DuplicateBinResult]]:
+) -> tuple[plt.Figure, plt.Axes, list[DuplicateBinResult]]:
     """Compute binned duplicate stats per experiment and plot them.
 
     Parameters
@@ -223,7 +224,7 @@ def plot_duplicates_by_experiment(
     figsize, sort_by_total, cmap:
         Passed to `plot_duplicate_bins`.
     """
-    results: List[DuplicateBinResult] = []
+    results: list[DuplicateBinResult] = []
     for name, duplicates in experiments.items():
         res = compute_duplicate_bin_counts(
             duplicates,

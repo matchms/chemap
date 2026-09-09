@@ -1,4 +1,4 @@
-from typing import Literal, Optional, Tuple, Union
+from typing import Literal, Union
 import numba
 import numpy as np
 import scipy.sparse as sp
@@ -10,7 +10,7 @@ import scipy.sparse as sp
 
 # Unfolded inputs
 UnfoldedBinary = np.ndarray
-UnfoldedCount = Tuple[np.ndarray, np.ndarray]
+UnfoldedCount = tuple[np.ndarray, np.ndarray]
 UnfoldedFingerprint = Union[UnfoldedBinary, UnfoldedCount]
 
 # Dense / sparse fixed-size
@@ -276,7 +276,7 @@ def tanimoto_similarity_matrix_sparse(
 # High-level Python convenience wrappers
 # ---------------------------
 
-def _as_1xD_csr(x: Union[np.ndarray, sp.csr_matrix]) -> sp.csr_matrix:
+def _as_1xD_csr(x: np.ndarray | sp.csr_matrix) -> sp.csr_matrix:
     """Convert input to a 1xD csr_matrix."""
     if sp.isspmatrix_csr(x):
         if x.shape[0] == 1:
@@ -291,10 +291,10 @@ def _as_1xD_csr(x: Union[np.ndarray, sp.csr_matrix]) -> sp.csr_matrix:
 
 
 def tanimoto_similarity(
-    a: Union[DenseVector, sp.csr_matrix, UnfoldedFingerprint],
-    b: Union[DenseVector, sp.csr_matrix, UnfoldedFingerprint],
+    a: DenseVector | sp.csr_matrix | UnfoldedFingerprint,
+    b: DenseVector | sp.csr_matrix | UnfoldedFingerprint,
     *,
-    kind: Optional[Literal["dense", "sparse", "unfolded-binary", "unfolded-count"]] = None,
+    kind: Literal["dense", "sparse", "unfolded-binary", "unfolded-count"] | None = None,
 ) -> float:
     """
     Function to compute Tanimoto similarity between two fingerprints/vectors. 
@@ -363,8 +363,8 @@ def tanimoto_similarity(
 
 
 def tanimoto_similarity_matrix(
-    references: Union[DenseMatrix, sp.csr_matrix],
-    queries: Union[DenseMatrix, sp.csr_matrix],
+    references: DenseMatrix | sp.csr_matrix,
+    queries: DenseMatrix | sp.csr_matrix,
     *,
     kind: Literal["dense", "sparse"] = "dense",
 ) -> np.ndarray:

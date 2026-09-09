@@ -1,5 +1,5 @@
 from dataclasses import replace
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 import numpy as np
 import pytest
 import scipy.sparse as sp
@@ -18,7 +18,7 @@ from chemap import FingerprintConfig, compute_fingerprints
 
 
 # simple smiles for testing
-SMILES: List[str] = [
+SMILES: list[str] = [
     "CCO",                 # ethanol
     "c1ccccc1",            # benzene
     "CC(=O)O",             # acetic acid
@@ -31,7 +31,7 @@ SMILES: List[str] = [
 # Generator inventory (RDKit)
 # ----------------------------
 
-def _rdkit_generators() -> List[Tuple[str, Any]]:
+def _rdkit_generators() -> list[tuple[str, Any]]:
     return [
         ("rdkit_morgan_2048_r2", rdFingerprintGenerator.GetMorganGenerator(radius=2, fpSize=2048)),
         ("rdkit_rdkitfp_2048", rdFingerprintGenerator.GetRDKitFPGenerator(fpSize=2048)),
@@ -44,7 +44,7 @@ def _rdkit_generators() -> List[Tuple[str, Any]]:
 # Generator inventory (scikit-fingerprints)
 # ---------------------------------------
 
-def _skfp_generators() -> Dict[str, Any]:
+def _skfp_generators() -> dict[str, Any]:
     return {
         "MAPFingerprint": MAPFingerprint,
         "AvalonFingerprint": AvalonFingerprint,
@@ -57,16 +57,16 @@ def _skfp_generators() -> Dict[str, Any]:
     }
 
 
-def _supports_count_param(params: Dict[str, Any]) -> Optional[str]:
+def _supports_count_param(params: dict[str, Any]) -> str | None:
     for key in ("count", "counts", "use_counts", "useCounts", "use_count"):
         if key in params:
             return key
     return None
 
 
-def _build_skfp_transformers() -> List[Tuple[str, Any, bool]]:
+def _build_skfp_transformers() -> list[tuple[str, Any, bool]]:
     mod = _skfp_generators()
-    out: List[Tuple[str, Any, bool]] = []
+    out: list[tuple[str, Any, bool]] = []
 
     for cls_name, cls in mod.items():
         try:
@@ -146,7 +146,7 @@ def _case1_dense_cases():
     - dense fingerprint (binary and where feasible count)
     Each run = separate pytest param case.
     """
-    cases: List[pytest.ParamSpecArg] = []
+    cases: list[pytest.ParamSpecArg] = []
 
     # RDKit: binary + count
     for name, gen in _rdkit_generators():
@@ -175,7 +175,7 @@ def _case2_csr_cases():
     - return_csr=True (binary and where feasible count)
     Each run = separate pytest param case.
     """
-    cases: List[pytest.ParamSpecArg] = []
+    cases: list[pytest.ParamSpecArg] = []
 
     # RDKit: binary + count
     for name, gen in _rdkit_generators():
@@ -209,7 +209,7 @@ def _case3_fit_backend_cases():
            - if supports variant: works (unfolded)
            - else: raises NotImplementedError
     """
-    cases: List[pytest.ParamSpecArg] = []
+    cases: list[pytest.ParamSpecArg] = []
 
     for name, fp, supports_count in _build_skfp_transformers():
         # A)

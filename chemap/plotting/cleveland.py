@@ -1,5 +1,5 @@
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Dict, Mapping, Optional, Sequence, Tuple
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.axes import Axes
@@ -10,7 +10,7 @@ from matplotlib.lines import Line2D
 @dataclass(frozen=True)
 class ClevelandStyle:
     """Styling defaults for a Cleveland-ish dot plot."""
-    figsize: Tuple[float, float] = (9.0, 6.0)
+    figsize: tuple[float, float] = (9.0, 6.0)
     dpi: int = 600
     markersize: float = 7.0
     markeredgecolor: str = "white"
@@ -28,23 +28,23 @@ def cleveland_dotplot(
     # Data in "tidy" arrays
     row: Sequence[str],
     x: Sequence[float],
-    color_group: Optional[Sequence[str]] = None,
-    marker_group: Optional[Sequence[str]] = None,
-    connect_group: Optional[Sequence[str]] = None,
-    marker_zorder: Optional[Mapping[str, float]] = None,
+    color_group: Sequence[str] | None = None,
+    marker_group: Sequence[str] | None = None,
+    connect_group: Sequence[str] | None = None,
+    marker_zorder: Mapping[str, float] | None = None,
 
     # Ordering / labels
-    row_order: Optional[Sequence[str]] = None,
+    row_order: Sequence[str] | None = None,
     row_label_fn=None,
 
     # Mappings
-    color_map: Optional[Dict[str, str]] = None,
-    marker_map: Optional[Dict[str, str]] = None,
+    color_map: dict[str, str] | None = None,
+    marker_map: dict[str, str] | None = None,
 
     # Figure/axes
     title: str = "",
     xlabel: str = "",
-    ax: Optional[Axes] = None,
+    ax: Axes | None = None,
 
     # Behavior
     connect: bool = True,
@@ -64,7 +64,7 @@ def cleveland_dotplot(
     marker_legend_position: str = "lower right",
 
     style: ClevelandStyle = ClevelandStyle(),
-) -> Tuple[Figure, Axes]:
+) -> tuple[Figure, Axes]:
     """
     Generic Cleveland-ish dot plot.
 

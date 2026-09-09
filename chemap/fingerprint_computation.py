@@ -1,5 +1,6 @@
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Dict, List, Literal, Optional, Protocol, Sequence, Tuple, Union
+from typing import Any, Literal, Optional, Protocol, Union
 import numpy as np
 import scipy.sparse as sp
 from joblib import Parallel, delayed
@@ -65,8 +66,8 @@ class FingerprintConfig:
     folded: bool = True
     return_csr: bool = False  # only applies when folded=True
     scaling: Scaling = None
-    folded_weights: Optional[np.ndarray] = None
-    unfolded_weights: Optional[Dict[int, float]] = None
+    folded_weights: np.ndarray | None = None
+    unfolded_weights: dict[int, float] | None = None
     invalid_policy: InvalidPolicy = "keep"
 
 
@@ -79,7 +80,7 @@ class SklearnTransformer(Protocol):
     def transform(self, X: Sequence[str]) -> Any:
         ...
 
-    def get_params(self, deep: bool = False) -> Dict[str, Any]:
+    def get_params(self, deep: bool = False) -> dict[str, Any]:
         ...
 
 
@@ -185,7 +186,7 @@ def _apply_folded_weights_csr(X: sp.csr_matrix, weights: np.ndarray) -> sp.csr_m
     return X.multiply(w).astype(np.float32)
 
 
-def _apply_unfolded_weights(keys: np.ndarray, vals: np.ndarray, weights: Dict[int, float]) -> np.ndarray:
+def _apply_unfolded_weights(keys: np.ndarray, vals: np.ndarray, weights: dict[int, float]) -> np.ndarray:
     w = np.array([float(weights.get(int(k), 1.0)) for k in keys], dtype=np.float32)
     return (vals * w).astype(np.float32, copy=False)
 
@@ -216,7 +217,7 @@ def _empty_unfolded_binary() -> np.ndarray:
     return np.array([], dtype=np.int64)
 
 
-def _empty_unfolded_count() -> Tuple[np.ndarray, np.ndarray]:
+def _empty_unfolded_count() -> tuple[np.ndarray, np.ndarray]:
     return np.array([], dtype=np.int64), np.array([], dtype=np.float32)
 
 
@@ -260,7 +261,7 @@ def mol_from_smiles(smiles: str) -> Optional["Chem.Mol"]:
     return mol
 
 
-def _compute_mols_parallel(smiles: Sequence[str], n_jobs: int, show_progress: bool) -> List[Optional["Chem.Mol"]]:
+def _compute_mols_parallel(smiles: Sequence[str], n_jobs: int, show_progress: bool) -> list[Optional["Chem.Mol"]]:
     """
     Compute RDKit molecules from SMILES in parallel.
     """
@@ -381,9 +382,9 @@ def _rdkit_folded_dense(
     Dense folded output (N, D) float32 for RDKit generators.
     """
     mols = _compute_mols_parallel(smiles, n_jobs, show_progress)
-    rows: List[np.ndarray] = []
-    n_features: Optional[int] = None
-    pending_invalid: List[int] = []  # indices in `rows` that need backfill after we learn D
+    rows: list[np.ndarray] = []
+    n_features: int | None = None
+    pending_invalid: list[int] = []  # indices in `rows` that need backfill after we learn D
 
     for s, mol in tqdm(
             zip(smiles, mols),
@@ -444,13 +445,13 @@ def _rdkit_folded_csr(
     - raise: raises ValueError
     """
     mols = _compute_mols_parallel(smiles, n_jobs, show_progress)
-    n_features: Optional[int] = None
+    n_features: int | None = None
 
-    idx_chunks: List[np.ndarray] = []
-    val_chunks: List[np.ndarray] = []
-    row_lengths: List[int] = []
+    idx_chunks: list[np.ndarray] = []
+    val_chunks: list[np.ndarray] = []
+    row_lengths: list[int] = []
 
-    w: Optional[np.ndarray] = None
+    w: np.ndarray | None = None
     if cfg.folded_weights is not None:
         w = np.asarray(cfg.folded_weights, dtype=np.float32).ravel()
 
@@ -523,7 +524,7 @@ def _looks_like_sklearn_transformer(fpgen: Any) -> bool:
     return hasattr(fpgen, "transform") and hasattr(fpgen, "get_params")
 
 
-def _clone_transformer_with_params(fpgen: SklearnTransformer, updates: Dict[str, Any]) -> SklearnTransformer:
+def _clone_transformer_with_params(fpgen: SklearnTransformer, updates: dict[str, Any]) -> SklearnTransformer:
     params = fpgen.get_params(deep=False)
     params.update(updates)
     return fpgen.__class__(**params)  # type: ignore[arg-type]
@@ -534,7 +535,7 @@ def _resolve_skfp_variant(
     *,
     want_folded: bool,
     want_count: bool,
-) -> Optional[str]:
+) -> str | None:
     """
     Return the appropriate value for the transformer's `variant` parameter,
     or None if no variant update is needed / supported.
@@ -586,7 +587,7 @@ def _skfp_configure_output(
        - folded via folded=True
     """
     params = fpgen.get_params(deep=False)
-    updates: Dict[str, Any] = {}
+    updates: dict[str, Any] = {}
 
     if "verbose" in params:
         updates["verbose"] = 1 if show_progress else 0

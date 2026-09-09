@@ -1,6 +1,7 @@
 import struct
+from collections.abc import Iterable, Sequence
 from hashlib import sha1
-from typing import Iterable, Sequence, Union
+from typing import Union
 import numpy as np
 
 

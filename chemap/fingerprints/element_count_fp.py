@@ -1,4 +1,5 @@
-from typing import Any, Dict, List, Optional, Sequence
+from collections.abc import Sequence
+from typing import Any
 import numpy as np
 import scipy.sparse as sp
 from joblib import Parallel, delayed
@@ -30,7 +31,7 @@ class ElementCountFingerprint(BaseEstimator, TransformerMixin):
     def __init__(
         self,
         *,
-        elements: Optional[Sequence[str]] = None,
+        elements: Sequence[str] | None = None,
         include_hs: str = "implicit",     # "implicit" | "explicit" | "none"
         unknown_policy: str = "other",    # "ignore" | "other" | "error"
         sparse: bool = False,
@@ -88,7 +89,7 @@ class ElementCountFingerprint(BaseEstimator, TransformerMixin):
                 elems.append("Other")
             self.elements_ = elems
 
-        self._elem2idx_: Dict[str, int] = {e: i for i, e in enumerate(self.elements_)}
+        self._elem2idx_: dict[str, int] = {e: i for i, e in enumerate(self.elements_)}
         self.n_features_in_ = len(self.elements_)
         return self
 
@@ -150,7 +151,7 @@ class ElementCountFingerprint(BaseEstimator, TransformerMixin):
 
             return out
 
-        rows: List[np.ndarray] = Parallel(n_jobs=self.n_jobs, verbose=self.verbose)(
+        rows: list[np.ndarray] = Parallel(n_jobs=self.n_jobs, verbose=self.verbose)(
             delayed(fp_row)(mol) for mol in X
         )
 

@@ -1,7 +1,8 @@
 import json
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, Union
+from typing import Any
 import numpy as np
 
 
@@ -14,14 +15,14 @@ class DuplicatesNPZ:
     """CSR-like encoding of duplicate groups."""
     indices: np.ndarray  # shape (nnz,), int
     indptr: np.ndarray   # shape (n_groups+1,), int
-    n_items: Optional[int] = None  # optional size of the original universe
+    n_items: int | None = None  # optional size of the original universe
 
 
 def encode_duplicates(
     duplicates: Sequence[Sequence[int]],
     *,
     dtype: np.dtype = np.int32,
-    n_items: Optional[int] = None,
+    n_items: int | None = None,
 ) -> DuplicatesNPZ:
     """Encode list-of-lists duplicate groups into CSR-like arrays."""
     # Build indptr
@@ -51,7 +52,7 @@ def encode_duplicates(
         )
 
 
-def decode_duplicates(encoded: DuplicatesNPZ) -> List[List[int]]:
+def decode_duplicates(encoded: DuplicatesNPZ) -> list[list[int]]:
     """Decode CSR-like arrays back into list-of-lists."""
     indices = np.asarray(encoded.indices)
     indptr = np.asarray(encoded.indptr)
@@ -65,7 +66,7 @@ def decode_duplicates(encoded: DuplicatesNPZ) -> List[List[int]]:
     if np.any(indptr[1:] < indptr[:-1]):
         raise ValueError("indptr must be non-decreasing")
 
-    out: List[List[int]] = []
+    out: list[list[int]] = []
     for i in range(indptr.size - 1):
         start = int(indptr[i])
         end = int(indptr[i + 1])
@@ -78,12 +79,12 @@ def decode_duplicates(encoded: DuplicatesNPZ) -> List[List[int]]:
 # ---------------------------------------------------------------------------
 
 def save_duplicates_npz(
-    filepath: Union[str, Path],
+    filepath: str | Path,
     duplicates: Sequence[Sequence[int]],
     *,
-    n_items: Optional[int] = None,
+    n_items: int | None = None,
     dtype: np.dtype = np.int32,
-    metadata: Optional[Mapping[str, Any]] = None,
+    metadata: Mapping[str, Any] | None = None,
     metadata_suffix: str = ".json",
 ) -> Path:
     """Save duplicates to a compressed NPZ file (+ optional JSON metadata sidecar)."""
@@ -107,11 +108,11 @@ def save_duplicates_npz(
 
 
 def load_duplicates_npz(
-    filepath: Union[str, Path],
+    filepath: str | Path,
     *,
     load_metadata: bool = False,
     metadata_suffix: str = ".json",
-) -> Tuple[List[List[int]], Optional[Dict[str, Any]]]:
+) -> tuple[list[list[int]], dict[str, Any] | None]:
     """Load duplicates from NPZ (and optional JSON metadata if present)."""
     path = Path(filepath)
     with np.load(path, allow_pickle=False) as z:
@@ -119,14 +120,14 @@ def load_duplicates_npz(
         indptr = z["indptr"]
         n_items_arr = z.get("n_items", None)
 
-    n_items: Optional[int] = None
+    n_items: int | None = None
     if n_items_arr is not None:
         v = int(np.asarray(n_items_arr).reshape(-1)[0])
         n_items = None if v < 0 else v
 
     duplicates = decode_duplicates(DuplicatesNPZ(indices=indices, indptr=indptr, n_items=n_items))
 
-    meta: Optional[Dict[str, Any]] = None
+    meta: dict[str, Any] | None = None
     if load_metadata:
         meta_path = path.with_suffix(path.suffix + metadata_suffix)
         if meta_path.exists():
@@ -145,17 +146,17 @@ class PrecomputedDuplicates:
     """One precomputed experiment entry loaded from disk."""
     name: str
     path_npz: Path
-    duplicates: List[List[int]]
-    metadata: Optional[Dict[str, Any]] = None
+    duplicates: list[list[int]]
+    metadata: dict[str, Any] | None = None
 
 
 def load_precomputed_duplicates_folder(
-    folder: Union[str, Path],
+    folder: str | Path,
     *,
     pattern: str = "*_duplicates.npz",
-    name_from_filename: Optional[Any] = None,
+    name_from_filename: Any | None = None,
     load_metadata: bool = False,
-) -> List[PrecomputedDuplicates]:
+) -> list[PrecomputedDuplicates]:
     """Load all precomputed duplicate results from a folder.
 
     Parameters
@@ -178,11 +179,11 @@ def load_precomputed_duplicates_folder(
         raise FileNotFoundError(f"Folder does not exist: {folder_path}")
 
     files = sorted(folder_path.glob(pattern))
-    out: List[PrecomputedDuplicates] = []
+    out: list[PrecomputedDuplicates] = []
 
     def default_name(p: Path) -> str:
         stem = p.stem  # for "x_duplicates.npz" => "x_duplicates"
-        return stem[:-11] if stem.endswith("_duplicates") else stem
+        return stem.removesuffix("_duplicates")
 
     name_fn = name_from_filename or default_name
 

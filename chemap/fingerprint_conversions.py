@@ -1,5 +1,6 @@
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Callable, Dict, Literal, Optional, Sequence, Tuple, Union
+from typing import Literal, Optional, Union
 import numpy as np
 import scipy.sparse as sp
 
@@ -8,7 +9,7 @@ import scipy.sparse as sp
 # Types
 # ---------------------------
 
-CountFingerprint = Tuple[np.ndarray, np.ndarray]  # (bits, counts)
+CountFingerprint = tuple[np.ndarray, np.ndarray]  # (bits, counts)
 BinaryFingerprint = np.ndarray                    # (bits,)
 FingerprintInput = Union[CountFingerprint, BinaryFingerprint]
 
@@ -20,7 +21,7 @@ class Vocabulary:
     """Column vocabulary for unfolded fingerprints."""
     col_bits: np.ndarray  # shape (n_cols,), int64; original bit-id per column
     df: np.ndarray        # shape (n_cols,), int32; document frequency per column (occurrence across rows)
-    bit_to_col: Optional[Dict[int, int]] = None  # optional (can be huge)
+    bit_to_col: dict[int, int] | None = None  # optional (can be huge)
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,7 +29,7 @@ class MatrixWithVocab:
     """Convenience return type."""
     X: sp.csr_matrix
     vocab: Vocabulary
-    idf: Optional[np.ndarray] = None  # shape (n_cols,), float32/float64
+    idf: np.ndarray | None = None  # shape (n_cols,), float32/float64
 
 
 # ---------------------------
@@ -37,9 +38,9 @@ class MatrixWithVocab:
 
 def _resolve_occurrence_thresholds(
     n_rows: int,
-    min_occurrence: Optional[int],
-    max_occurrence: Optional[Union[int, float]],
-) -> tuple[Optional[int], Optional[int]]:
+    min_occurrence: int | None,
+    max_occurrence: int | float | None,
+) -> tuple[int | None, int | None]:
     if min_occurrence is not None:
         if not isinstance(min_occurrence, (int, np.integer)):
             raise TypeError("min_occurrence must be an int or None.")
@@ -86,7 +87,7 @@ def _validate_row(
     row: FingerprintInput,
     row_idx: int,
     kind: Literal["count", "binary"],
-) -> tuple[np.ndarray, Optional[np.ndarray]]:
+) -> tuple[np.ndarray, np.ndarray | None]:
     """
     Return (bits_i64, counts_or_none). Always 1D.
     """
@@ -113,7 +114,7 @@ def _compute_df_and_order(
     fingerprints: Sequence[FingerprintInput],
     *,
     sort_bits: bool,
-) -> tuple[Dict[int, int], Optional[Dict[int, int]], int, Literal["count", "binary"]]:
+) -> tuple[dict[int, int], dict[int, int] | None, int, Literal["count", "binary"]]:
     """
     Compute document frequency df(bit) = number of rows where bit appears at least once.
 
@@ -134,8 +135,8 @@ def _compute_df_and_order(
         return {}, None, 0, "binary"
 
     kind = _infer_kind(fingerprints[0])
-    df: Dict[int, int] = {}
-    order: Optional[Dict[int, int]] = {} if not sort_bits else None
+    df: dict[int, int] = {}
+    order: dict[int, int] | None = {} if not sort_bits else None
     nnz_ub = 0
 
     for i, row in enumerate(fingerprints):
@@ -168,14 +169,14 @@ def _compute_df_and_order(
 
 
 def _build_vocab(
-    df_dict: Dict[int, int],
-    order: Optional[Dict[int, int]],
+    df_dict: dict[int, int],
+    order: dict[int, int] | None,
     *,
     n_rows: int,
     sort_bits: bool,
     return_bit_to_col: bool,
-    min_occurrence: Optional[int],
-    max_occurrence: Optional[Union[int, float]],
+    min_occurrence: int | None,
+    max_occurrence: int | float | None,
 ) -> Vocabulary:
     """
     Build filtered vocabulary (col_bits + df array + optional bit_to_col).
@@ -211,7 +212,7 @@ def _build_vocab(
     col_bits = all_bits[keep]
     df_kept = df_all[keep]
 
-    bit_to_col: Optional[Dict[int, int]] = None
+    bit_to_col: dict[int, int] | None = None
     if return_bit_to_col:
         bit_to_col = {int(b): int(j) for j, b in enumerate(col_bits)}
 
@@ -225,13 +226,13 @@ def _build_vocab(
 def fingerprints_to_csr(
     fingerprints: Sequence[FingerprintInput],
     *,
-    dtype: Union[np.dtype, type] = np.float32,
+    dtype: np.dtype | type = np.float32,
     sort_bits: bool = True,
     sort_indices_within_rows: bool = True,
     consolidate_duplicates_within_rows: bool = True,
     return_bit_to_col: bool = False,
-    min_occurrence: Optional[int] = None,
-    max_occurrence: Optional[Union[int, float]] = None,
+    min_occurrence: int | None = None,
+    max_occurrence: int | float | None = None,
     tf_transform: TFTransform = None,
 ) -> MatrixWithVocab:
     """
@@ -512,13 +513,13 @@ def idf_normalized(df: np.ndarray, N: int) -> np.ndarray:
 def fingerprints_to_tfidf(
     fingerprints: Sequence[FingerprintInput],
     *,
-    dtype: Union[np.dtype, type] = np.float32,
+    dtype: np.dtype | type = np.float32,
     sort_bits: bool = True,
     sort_indices_within_rows: bool = True,
     consolidate_duplicates_within_rows: bool = True,
     return_bit_to_col: bool = False,
-    min_occurrence: Optional[int] = None,
-    max_occurrence: Optional[Union[int, float]] = None,
+    min_occurrence: int | None = None,
+    max_occurrence: int | float | None = None,
     tf_transform: TFTransform = None,
 ) -> MatrixWithVocab:
     """
@@ -640,13 +641,13 @@ def fingerprints_to_csr_folded(
     fingerprints: Sequence[FingerprintInput],
     *,
     n_folded_features: int,
-    dtype: Union[np.dtype, type] = np.float32,
+    dtype: np.dtype | type = np.float32,
     sort_bits: bool = True,
     sort_indices_within_rows: bool = True,
     consolidate_duplicates_within_rows: bool = True,
     return_bit_to_col: bool = False,
-    min_occurrence: Optional[int] = None,
-    max_occurrence: Optional[Union[int, float]] = None,
+    min_occurrence: int | None = None,
+    max_occurrence: int | float | None = None,
     tf_transform: TFTransform = None,
 ) -> MatrixWithVocab:
     """
@@ -710,13 +711,13 @@ def fingerprints_to_tfidf_folded(
     fingerprints: Sequence[FingerprintInput],
     *,
     n_folded_features: int,
-    dtype: Union[np.dtype, type] = np.float32,
+    dtype: np.dtype | type = np.float32,
     sort_bits: bool = True,
     sort_indices_within_rows: bool = True,
     consolidate_duplicates_within_rows: bool = True,
     return_bit_to_col: bool = False,
-    min_occurrence: Optional[int] = None,
-    max_occurrence: Optional[Union[int, float]] = None,
+    min_occurrence: int | None = None,
+    max_occurrence: int | float | None = None,
     tf_transform: TFTransform = None,
 ) -> MatrixWithVocab:
     """
@@ -857,7 +858,7 @@ def _fingerprints_to_csr_with_vocab(
     fingerprints: Sequence[FingerprintInput],
     vocab: Vocabulary,
     *,
-    dtype: Union[np.dtype, type] = np.float32,
+    dtype: np.dtype | type = np.float32,
     sort_indices_within_rows: bool = True,
     consolidate_duplicates_within_rows: bool = True,
     tf_transform: TFTransform = None,
@@ -957,13 +958,13 @@ def fingerprints_to_csr_frequency_folded(
     fingerprints: Sequence[FingerprintInput],
     *,
     n_frequency_features: int,
-    dtype: Union[np.dtype, type] = np.float32,
+    dtype: np.dtype | type = np.float32,
     sort_bits: bool = True,
     sort_indices_within_rows: bool = True,
     consolidate_duplicates_within_rows: bool = True,
     return_bit_to_col: bool = False,
-    min_occurrence: Optional[int] = None,
-    max_occurrence: Optional[Union[int, float]] = None,
+    min_occurrence: int | None = None,
+    max_occurrence: int | float | None = None,
     tf_transform: TFTransform = None,
     exclude_constant_bits: bool = True,
 ) -> MatrixWithVocab:

@@ -1,5 +1,5 @@
 from dataclasses import replace
-from typing import Any, Optional
+from typing import Any
 import numpy as np
 import pandas as pd
 from chemap import FingerprintConfig, compute_fingerprints
@@ -54,15 +54,15 @@ def create_chem_space_umap(
     x_col: str = "x",
     y_col: str = "y",
     # fingerprinting
-    fpgen: Optional[Any] = None,
-    fingerprint_config: Optional[FingerprintConfig] = None,
+    fpgen: Any | None = None,
+    fingerprint_config: FingerprintConfig | None = None,
     show_progress: bool = True,
     scaling: str = None,
     # UMAP (CPU / umap-learn)
     n_neighbors: int = 100,
     min_dist: float = 0.25,
     n_jobs: int = -1,
-    umap_random_state: Optional[int] = None,
+    umap_random_state: int | None = None,
     distance_function: str = "tanimoto",
 ) -> pd.DataFrame:
     """Compute fingerprints (CPU) and create 2D UMAP coordinates (CPU).
@@ -170,8 +170,8 @@ def create_chem_space_umap_gpu(
     x_col: str = "x",
     y_col: str = "y",
     # fingerprinting
-    fpgen: Optional[Any] = None,
-    fingerprint_config: Optional[FingerprintConfig] = None,
+    fpgen: Any | None = None,
+    fingerprint_config: FingerprintConfig | None = None,
     show_progress: bool = True,
     scaling: str = None,
     # UMAP (GPU / cuML)

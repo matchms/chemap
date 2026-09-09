@@ -51,7 +51,7 @@ class DatasetLoader:
         -------------
         ValueError if DOI not present.
         """
-        doi_pattern = r'(10\.\d{4,9}/[-._;()/:a-zA-Z0-9]+)'
+        doi_pattern = r"(10\.\d{4,9}/[-._;()/:a-zA-Z0-9]+)"
 
         if not source.startswith("doi") or not bool(re.search(doi_pattern, source)):
             ValueError(f"Could not detect DOI in source {source}.")
