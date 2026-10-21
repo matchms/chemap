@@ -2,7 +2,6 @@
 *.eggs
 .ipynb_checkpoints/
 .cache
-data/
 figures/
 experiments/
 
