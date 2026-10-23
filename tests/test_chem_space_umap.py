@@ -63,6 +63,24 @@ def _install_fake_cuml(monkeypatch, cls=DummyCuUMAP) -> None:
     monkeypatch.setitem(sys.modules, "cuml.manifold.umap", umap)
 
 
+def _install_fake_chemap_metrics(
+    monkeypatch,
+    *,
+    dense_metric=None,
+    sparse_metric=None,
+):
+    """Install a lightweight stand-in for lazily imported Chemap metrics."""
+    module = ModuleType("chemap.metrics")
+    module.tanimoto_distance_dense = (
+        dense_metric if dense_metric is not None else object()
+    )
+    module.tanimoto_distance_sparse = (
+        sparse_metric if sparse_metric is not None else object()
+    )
+    monkeypatch.setitem(sys.modules, "chemap.metrics", module)
+    return module
+
+
 def _folded_config(*, count=True, invalid_policy="raise"):
     return FingerprintConfig(
         count=count,
@@ -169,20 +187,44 @@ def test_validate_fingerprint_config_rejects_non_raise_invalid_policy():
 
 
 @pytest.mark.parametrize(
-    ("folded", "expected"),
+    ("folded", "expected_attribute"),
     [
-        (True, csu.tanimoto_distance_dense),
-        (False, csu.tanimoto_distance_sparse),
+        (True, "tanimoto_distance_dense"),
+        (False, "tanimoto_distance_sparse"),
     ],
 )
-def test_choose_cpu_metric_selects_tanimoto_implementation(folded, expected):
+def test_choose_cpu_metric_selects_tanimoto_implementation(
+    monkeypatch,
+    folded,
+    expected_attribute,
+):
+    metrics = _install_fake_chemap_metrics(monkeypatch)
     config = SimpleNamespace(folded=folded)
-    assert csu._choose_cpu_metric(config, "tanimoto") is expected
+
+    result = csu._choose_cpu_metric(config, "tanimoto")
+
+    assert result is getattr(metrics, expected_attribute)
 
 
 def test_choose_cpu_metric_returns_cosine_string():
     config = SimpleNamespace(folded=False)
     assert csu._choose_cpu_metric(config, "COSINE") == "cosine"
+
+
+def test_choose_cpu_metric_cosine_does_not_import_chemap_metrics(monkeypatch):
+    real_import = __import__
+
+    def guarded_import(name, *args, **kwargs):
+        if name == "chemap.metrics":
+            raise AssertionError(
+                "chemap.metrics must not be imported for cosine distance"
+            )
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr("builtins.__import__", guarded_import)
+
+    config = SimpleNamespace(folded=True)
+    assert csu._choose_cpu_metric(config, "cosine") == "cosine"
 
 
 def test_choose_cpu_metric_rejects_non_string():
@@ -441,6 +483,8 @@ def test_create_chem_space_umap_configures_cpu_umap_and_returns_copy(
         return fingerprints
 
     monkeypatch.setattr(csu, "_compute_fingerprints", fake_compute)
+    metric = object()
+    monkeypatch.setattr(csu, "_choose_cpu_metric", lambda config, distance: metric)
     original = smiles_df.copy(deep=True)
     config = _folded_config(count=True)
     fpgen = object()
@@ -468,7 +512,7 @@ def test_create_chem_space_umap_configures_cpu_umap_and_returns_copy(
         "n_neighbors": 7,
         "n_components": 2,
         "min_dist": 0.1,
-        "metric": csu.tanimoto_distance_dense,
+        "metric": metric,
         "random_state": 42,
         "n_jobs": 2,
         "init": "random",
