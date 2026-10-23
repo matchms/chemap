@@ -1,5 +1,5 @@
-from dataclasses import replace
-from typing import Any
+from __future__ import annotations
+from typing import Any, Literal
 import numpy as np
 import pandas as pd
 from chemap import FingerprintConfig, compute_fingerprints
@@ -14,36 +14,203 @@ from chemap.metrics import (
 )
 
 
+Scaling = Literal["log", "log1p", "tfidf"] | None
+DistanceFunction = Literal["tanimoto", "cosine"]
+
+
 def _ensure_smiles_column(df: pd.DataFrame, col_smiles: str) -> None:
     if not isinstance(df, pd.DataFrame):
         raise TypeError("data must be a pandas DataFrame")
     if col_smiles not in df.columns:
-        raise KeyError(f"data is missing required SMILES column: {col_smiles!r}")
-
-
-def _choose_cpu_metric(config: FingerprintConfig, distance_function: str) -> Any:
-    """Return a metric callable/object suitable for umap-learn based on FingerprintConfig.
-    
-    - unfolded => tanimoto_distance_sparse
-    - folded => tanimoto_distance_dense
-    """
-    if distance_function.lower() == "cosine":
-        return "cosine"
-    if distance_function.lower() != "tanimoto":
-        raise ValueError(
-            f"Unsupported distance_function={distance_function!r}. "
-            "Currently only 'tanimoto' and 'cosine' is supported here."
+        raise KeyError(
+            f"data is missing required SMILES column: {col_smiles!r}"
         )
 
-    if getattr(config, "folded", True):
-        return tanimoto_distance_dense
-    return tanimoto_distance_sparse
+
+def _default_fpgen():
+    from rdkit.Chem import rdFingerprintGenerator
+
+    return rdFingerprintGenerator.GetMorganGenerator(
+        radius=9,
+        fpSize=4096,
+    )
 
 
-def _log1p_csr_inplace(X) -> Any:
-    """Apply log1p to CSR data in-place (only affects non-zeros)."""
+def _normalize_scaling(scaling: Scaling) -> Literal["log1p", "tfidf"] | None:
+    if scaling is None:
+        return None
+    if not isinstance(scaling, str):
+        raise TypeError("scaling must be None, 'log'/'log1p', or 'tfidf'")
+
+    value = scaling.lower()
+    if value == "log":
+        value = "log1p"
+    if value not in {"log1p", "tfidf"}:
+        raise ValueError(
+            f"Unsupported scaling={scaling!r}. "
+            "Choose from None, 'log'/'log1p', or 'tfidf'."
+        )
+    return value
+
+
+def _validate_fingerprint_config(
+    config: FingerprintConfig,
+    *,
+    require_folded: bool,
+    scaling: Literal["log1p", "tfidf"] | None,
+) -> None:
+    """Validate UMAP-specific fingerprint requirements without rewriting config."""
+    if require_folded and not config.folded:
+        raise ValueError(
+            "create_chem_space_umap_gpu() requires "
+            "fingerprint_config.folded=True because cuML receives a dense, "
+            "fixed-size fingerprint matrix."
+        )
+
+    if scaling == "log1p" and not config.count:
+        raise ValueError(
+            "scaling='log'/'log1p' requires fingerprint_config.count=True."
+        )
+
+    # UMAP coordinates must remain row-aligned with the input DataFrame.
+    # So avoiding silently a fingerprint policy that may remove invalid structures.
+    invalid_policy = getattr(config, "invalid_policy", "raise")
+    if invalid_policy != "raise":
+        raise ValueError(
+            "Chemical-space UMAP requires fingerprint_config.invalid_policy="
+            "'raise' so each input row maps to exactly one coordinate row."
+        )
+
+
+def _choose_cpu_metric(
+    config: FingerprintConfig,
+    distance_function: str,
+) -> Any:
+    """Return the umap-learn metric implied by the requested distance."""
+    if not isinstance(distance_function, str):
+        raise TypeError("distance_function must be 'tanimoto' or 'cosine'")
+
+    distance = distance_function.lower()
+    if distance == "cosine":
+        return "cosine"
+    if distance != "tanimoto":
+        raise ValueError(
+            f"Unsupported distance_function={distance_function!r}. "
+            "Choose 'tanimoto' or 'cosine'."
+        )
+
+    return (
+        tanimoto_distance_dense
+        if config.folded
+        else tanimoto_distance_sparse
+    )
+
+
+def _log1p_csr(X):
+    """Return a CSR matrix with log1p applied to its non-zero values."""
+    X = X.astype(np.float32, copy=False)
     X.data = np.log1p(X.data)
     return X
+
+
+def _scale_dense(
+    fingerprints: Any,
+    scaling: Literal["log1p", "tfidf"] | None,
+) -> np.ndarray:
+    """Return a dense numeric fingerprint matrix with optional scaling."""
+    X = np.asarray(fingerprints)
+    if X.ndim != 2:
+        raise ValueError(
+            f"Expected a 2D fingerprint matrix; got shape {X.shape}."
+        )
+
+    if scaling is None:
+        return X
+
+    X = X.astype(np.float32, copy=False)
+    if scaling == "log1p":
+        return np.log1p(X)
+
+    idf = idf_normalized(
+        (X > 0).sum(axis=0),
+        X.shape[0],
+    )
+    return X * np.asarray(idf, dtype=np.float32)
+
+
+def _prepare_cpu_fingerprints(
+    fingerprints: Any,
+    config: FingerprintConfig,
+    scaling: Literal["log1p", "tfidf"] | None,
+):
+    if config.folded:
+        return _scale_dense(fingerprints, scaling)
+
+    if scaling == "tfidf":
+        return fingerprints_to_tfidf(fingerprints).X
+
+    X = fingerprints_to_csr(fingerprints).X
+    if scaling == "log1p":
+        X = _log1p_csr(X)
+    return X
+
+
+def _prepare_gpu_fingerprints(
+    fingerprints: Any,
+    scaling: Literal["log1p", "tfidf"] | None,
+) -> np.ndarray:
+    """Return a cuML-safe dense float32 matrix without lossy integer casting."""
+    X = _scale_dense(fingerprints, scaling)
+    return np.asarray(X, dtype=np.float32)
+
+
+def _to_numpy_coordinates(coords: Any, expected_rows: int) -> np.ndarray:
+    """Convert NumPy/CuPy/cuDF-like coordinates to a validated NumPy array."""
+    if hasattr(coords, "to_numpy"):
+        coords = coords.to_numpy()
+    elif hasattr(coords, "get"):
+        coords = coords.get()
+
+    coords_np = np.asarray(coords)
+    expected_shape = (expected_rows, 2)
+    if coords_np.shape != expected_shape:
+        raise ValueError(
+            f"UMAP returned coordinates with shape {coords_np.shape}; "
+            f"expected {expected_shape}."
+        )
+    if not np.isfinite(coords_np).all():
+        raise ValueError("UMAP returned non-finite coordinates.")
+    return coords_np
+
+
+def _compute_fingerprints(
+    df: pd.DataFrame,
+    *,
+    col_smiles: str,
+    fpgen: Any,
+    fingerprint_config: FingerprintConfig,
+    show_progress: bool,
+):
+    fingerprints = compute_fingerprints(
+        df[col_smiles],
+        fpgen,
+        config=fingerprint_config,
+        show_progress=show_progress,
+    )
+
+    try:
+        n_rows = len(fingerprints)
+    except TypeError as exc:
+        raise ValueError(
+            "compute_fingerprints() returned an object without a row dimension."
+        ) from exc
+
+    if n_rows != len(df):
+        raise ValueError(
+            "compute_fingerprints() changed row count: "
+            f"returned {n_rows} fingerprint rows for {len(df)} input rows."
+        )
+    return fingerprints
 
 
 def create_chem_space_umap(
@@ -57,105 +224,90 @@ def create_chem_space_umap(
     fpgen: Any | None = None,
     fingerprint_config: FingerprintConfig | None = None,
     show_progress: bool = True,
-    scaling: str = None,
+    scaling: Scaling = None,
     # UMAP (CPU / umap-learn)
     n_neighbors: int = 100,
     min_dist: float = 0.25,
     n_jobs: int = -1,
     umap_random_state: int | None = None,
-    distance_function: str = "tanimoto",
+    distance_function: DistanceFunction = "tanimoto",
 ) -> pd.DataFrame:
-    """Compute fingerprints (CPU) and create 2D UMAP coordinates (CPU).
+    """Compute molecular fingerprints and 2D UMAP coordinates on CPU.
 
-    Parameters
-    ----------
-    data:
-        Input dataframe containing a SMILES column.
-    col_smiles:
-        Name of the SMILES column.
-    inplace:
-        If True, write x/y columns into `data` and return it. Else returns a copy.
-    x_col, y_col:
-        Output coordinate column names.
-    fpgen:
-        RDKit fingerprint generator. Defaults to Morgan radius=9, fpSize=4096.
-    fingerprint_config:
-        FingerprintConfig for chemap.compute_fingerprints. Defaults to:
-            FingerprintConfig(count=True, folded=False, invalid_policy="raise")
-    show_progress:
-        Forwarded to compute_fingerprints.
-    scaling:
-        Define scaling for count fingerprints. Default is None, which means no scaling.
-        Can be set to "log" for log1p scaling, or to "tfidf" for TF-IDF scaling of bits.
-    n_neighbors, min_dist, umap_random_state:
-        Standard UMAP parameters.
-    n_jobs:
-        Passed to umap-learn UMAP for parallelism. Ignores random_state when n_jobs != 1.
-        Default -1 uses all CPUs.
-    distance_function:
-        Currently only "tanimoto" is supported. Metric is chosen based on config.
+    Fingerprint semantics are controlled explicitly by ``fingerprint_config``.
+    The configuration is never modified internally.
 
-    Returns
-    -------
-    DataFrame with added columns x_col and y_col.
+    Defaults
+    --------
+    ``fpgen``
+        Morgan generator with radius=9 and fpSize=4096.
+    ``fingerprint_config``
+        ``FingerprintConfig(count=True, folded=False, invalid_policy='raise')``.
+    ``distance_function``
+        ``'tanimoto'``. For Tanimoto, the dense or sparse Chemap metric is
+        selected from ``fingerprint_config.folded``. ``'cosine'`` is also
+        supported.
+    ``scaling``
+        ``None``. ``'log'``/``'log1p'`` applies log1p to count values and
+        therefore requires ``count=True``. ``'tfidf'`` applies Chemap's TF-IDF
+        scaling.
+
+    Notes
+    -----
+    ``invalid_policy='raise'`` is required so input rows and coordinate rows
+    remain aligned.
     """
     _ensure_smiles_column(data, col_smiles)
+    scaling = _normalize_scaling(scaling)
 
     df = data if inplace else data.copy()
+    fpgen = _default_fpgen() if fpgen is None else fpgen
+    config = fingerprint_config or FingerprintConfig(
+        count=True,
+        folded=False,
+        invalid_policy="raise",
+    )
+    _validate_fingerprint_config(
+        config,
+        require_folded=False,
+        scaling=scaling,
+    )
 
-    if fpgen is None:
-        from rdkit.Chem import rdFingerprintGenerator
-
-        fpgen = rdFingerprintGenerator.GetMorganGenerator(radius=9, fpSize=4096)
-
-    if fingerprint_config is None:
-        fingerprint_config = FingerprintConfig(count=True, folded=False, invalid_policy="raise")
-
-    # Compute fingerprints
-    fingerprints = compute_fingerprints(
-        df[col_smiles],
-        fpgen,
-        config=fingerprint_config,
+    fingerprints = _compute_fingerprints(
+        df,
+        col_smiles=col_smiles,
+        fpgen=fpgen,
+        fingerprint_config=config,
         show_progress=show_progress,
     )
 
-    # UMAP (CPU, supports sparse + custom metrics)
     try:
-        import umap  # umap-learn
-    except ModuleNotFoundError as e:
+        import umap
+    except ModuleNotFoundError as exc:
         raise ModuleNotFoundError(
-            "umap-learn is required for create_chem_space_umap(). Install 'umap-learn'."
-        ) from e
+            "umap-learn is required for create_chem_space_umap(). "
+            "Install 'umap-learn'."
+        ) from exc
 
-    metric = _choose_cpu_metric(fingerprint_config, distance_function)
-    
     reducer = umap.UMAP(
         n_neighbors=int(n_neighbors),
         n_components=2,
         min_dist=float(min_dist),
-        metric=metric,
+        metric=_choose_cpu_metric(config, distance_function),
         random_state=umap_random_state,
         n_jobs=n_jobs,
         init="random",
     )
 
-    if not fingerprint_config.folded:
-        # Convert to CSR matrix
-        if scaling == "tfidf":
-            fps_csr = fingerprints_to_tfidf(fingerprints).X
-        else:
-            fps_csr = fingerprints_to_csr(fingerprints).X
-    
-            if scaling == "log":
-                fps_csr = _log1p_csr_inplace(fps_csr)
-
-        coords = reducer.fit_transform(fps_csr)
-    else:
-        if scaling == "log":
-            fingerprints = np.log1p(fingerprints)
-        elif scaling == "tfidf":
-            fingerprints *= idf_normalized((fingerprints > 0).sum(axis=0), fingerprints.shape[0])
-        coords = reducer.fit_transform(fingerprints)
+    X = _prepare_cpu_fingerprints(
+        fingerprints,
+        config,
+        scaling,
+    )
+    coords = _to_numpy_coordinates(
+        reducer.fit_transform(X),
+        len(df),
+    )
 
     df[x_col] = coords[:, 0]
     df[y_col] = coords[:, 1]
@@ -173,97 +325,73 @@ def create_chem_space_umap_gpu(
     fpgen: Any | None = None,
     fingerprint_config: FingerprintConfig | None = None,
     show_progress: bool = True,
-    scaling: str = None,
+    scaling: Scaling = None,
     # UMAP (GPU / cuML)
     n_neighbors: int = 100,
     min_dist: float = 0.25,
+    umap_random_state: int | None = None,
 ) -> pd.DataFrame:
-    """Compute fingerprints and create 2D UMAP coordinates using cuML (GPU).
+    """Compute molecular fingerprints and 2D UMAP coordinates with cuML.
 
-    Parameters
-    ----------
-    data:
-        Input dataframe containing a SMILES column.
-    col_smiles:
-        Name of the SMILES column.
-    inplace:
-        If True, write x/y columns into `data` and return it. Else returns a copy.
-    x_col, y_col:
-        Output coordinate column names.
-    fpgen:
-        RDKit fingerprint generator. Defaults to Morgan radius=9, fpSize=4096.
-    fingerprint_config:
-        FingerprintConfig for chemap.compute_fingerprints. Defaults to:
-            FingerprintConfig(count=True, folded=False, invalid_policy="raise")
-    show_progress:
-        Forwarded to compute_fingerprints.
-    scaling:
-        Define scaling for count fingerprints. Default is None, which means no scaling.
-        Can be set to "log" for log1p scaling, or to "tfidf" for TF-IDF scaling of bits.
-    n_neighbors, min_dist, umap_random_state:
-        Standard UMAP parameters.
-    n_jobs:
-        Passed to umap-learn UMAP for parallelism. Ignores random_state when n_jobs != 1.
-        Default -1 uses all CPUs.
+    Fingerprint semantics are controlled explicitly by ``fingerprint_config``.
+    A caller-supplied configuration is never rewritten.
+
+    GPU requirements
+    ----------------
+    - cuML UMAP uses ``metric='cosine'``.
+    - ``fingerprint_config.folded`` must be ``True`` so the input is a dense,
+      fixed-size matrix.
+    - ``invalid_policy='raise'`` is required to preserve row alignment.
+
+    Defaults
+    --------
+    ``fpgen``
+        Morgan generator with radius=9 and fpSize=4096.
+    ``fingerprint_config``
+        ``FingerprintConfig(count=True, folded=True, invalid_policy='raise')``.
+    ``scaling``
+        ``None``. ``'log'``/``'log1p'`` applies log1p to count values and
+        requires ``count=True``. ``'tfidf'`` applies IDF scaling.
 
     Notes
     -----
-    - cuML UMAP here is fixed to metric="cosine"
-    - This function enforces a default fingerprint config of:
-        FingerprintConfig(count=True, folded=True, invalid_policy="raise")
-      Possible to pass `fingerprint_config`, but it will be overridden to ensure folded=True.
-    - Before feeding to cuML, fingerprints are converted to a dense array and cast to int8
-      to reduce memory; log_count (if enabled) converts to float via np.log1p.
-
-    Returns
-    -------
-    DataFrame with added columns x_col and y_col.
+    The dense GPU matrix is converted to ``float32``. Count fingerprints are
+    deliberately not cast to int8 because counts above 127 would overflow and
+    change cosine distances.
     """
     _ensure_smiles_column(data, col_smiles)
+    scaling = _normalize_scaling(scaling)
 
     df = data if inplace else data.copy()
 
-    # Ensure cuML is available
     try:
         from cuml.manifold.umap import UMAP as cuUMAP
-    except ModuleNotFoundError as e:
+    except ModuleNotFoundError as exc:
         raise ModuleNotFoundError(
             "cuml is required for create_chem_space_umap_gpu(). "
             "Install RAPIDS cuML for your CUDA setup."
-        ) from e
+        ) from exc
 
-    if fpgen is None:
-        from rdkit.Chem import rdFingerprintGenerator
-
-        fpgen = rdFingerprintGenerator.GetMorganGenerator(radius=9, fpSize=4096)
-
-    # Force the GPU defaults (folded=True)
-    default_cfg = FingerprintConfig(count=True, folded=True, invalid_policy="raise")
-    if fingerprint_config is None:
-        fingerprint_config = default_cfg
-    else:
-        # Override to ensure folded=True and count=True
-        fingerprint_config = replace(
-            fingerprint_config,
-            count=True,
-            folded=True,
-            invalid_policy=getattr(fingerprint_config, "invalid_policy", "raise"),
-        )
-
-    fingerprints = compute_fingerprints(
-        df[col_smiles],
-        fpgen,
-        config=fingerprint_config,
-        show_progress=show_progress,
+    fpgen = _default_fpgen() if fpgen is None else fpgen
+    config = fingerprint_config or FingerprintConfig(
+        count=True,
+        folded=True,
+        invalid_policy="raise",
+    )
+    _validate_fingerprint_config(
+        config,
+        require_folded=True,
+        scaling=scaling,
     )
 
-    # Reduce memory footprint (works well for count fingerprints)
-    if scaling == "log":
-        fingerprints = np.log1p(fingerprints).astype(np.float32, copy=False)
-    elif scaling == "tfidf":
-        fingerprints *= idf_normalized((fingerprints > 0).sum(axis=0), fingerprints.shape[0])
-    else:
-        fingerprints = fingerprints.astype(np.int8, copy=False)
+    fingerprints = _compute_fingerprints(
+        df,
+        col_smiles=col_smiles,
+        fpgen=fpgen,
+        fingerprint_config=config,
+        show_progress=show_progress,
+    )
+    X = _prepare_gpu_fingerprints(fingerprints, scaling)
 
     umap_model = cuUMAP(
         n_neighbors=int(n_neighbors),
@@ -272,13 +400,13 @@ def create_chem_space_umap_gpu(
         metric="cosine",
         min_dist=float(min_dist),
         n_components=2,
+        random_state=umap_random_state,
     )
 
-    coords = umap_model.fit_transform(fingerprints)
-
-    # cuML may return cupy/cudf-backed arrays; np.asarray makes it safe for pandas columns.
-    coords_np = np.asarray(coords)
-
-    df[x_col] = coords_np[:, 0]
-    df[y_col] = coords_np[:, 1]
+    coords = _to_numpy_coordinates(
+        umap_model.fit_transform(X),
+        len(df),
+    )
+    df[x_col] = coords[:, 0]
+    df[y_col] = coords[:, 1]
     return df
