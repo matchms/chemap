@@ -8,10 +8,6 @@ from chemap.fingerprint_conversions import (
     fingerprints_to_tfidf,
     idf_normalized,
 )
-from chemap.metrics import (
-    tanimoto_distance_dense,
-    tanimoto_distance_sparse,
-)
 
 
 Scaling = Literal["log", "log1p", "tfidf"] | None
@@ -86,24 +82,29 @@ def _choose_cpu_metric(
     config: FingerprintConfig,
     distance_function: str,
 ) -> Any:
-    """Return the umap-learn metric implied by the requested distance."""
-    if not isinstance(distance_function, str):
-        raise TypeError("distance_function must be 'tanimoto' or 'cosine'")
+    """Return a metric suitable for umap-learn."""
 
     distance = distance_function.lower()
+
     if distance == "cosine":
         return "cosine"
+
     if distance != "tanimoto":
         raise ValueError(
             f"Unsupported distance_function={distance_function!r}. "
-            "Choose 'tanimoto' or 'cosine'."
+            "Currently only 'tanimoto' and 'cosine' are supported."
         )
 
-    return (
-        tanimoto_distance_dense
-        if config.folded
-        else tanimoto_distance_sparse
+    # Import CPU/Numba metrics only when Tanimoto is actually requested.
+    from chemap.metrics import (
+        tanimoto_distance_dense,
+        tanimoto_distance_sparse,
     )
+
+    if config.folded:
+        return tanimoto_distance_dense
+
+    return tanimoto_distance_sparse
 
 
 def _log1p_csr(X):
